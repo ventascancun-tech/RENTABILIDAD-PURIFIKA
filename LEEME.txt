@@ -1,0 +1,10 @@
+Cotizador Purifika - app instalable
+
+1. Sube esta carpeta completa a un hosting gratuito con https (por ejemplo Netlify, GitHub Pages o Cloudflare Pages).
+2. Abre la direccion en Chrome en la tablet y elige "Instalar app" o "Anadir a pantalla de inicio".
+3. Abre la app una vez con internet para que se guarde. Despues funciona sin conexion.
+4. Para cargar tus equipos y proyectos: en la version con la nube guarda un respaldo (JSON) y en la app instalada usa
+   Lista de precios > Restaurar respaldo.
+
+Esta carpeta no incluye tu lista de precios ni tus costos. Tus datos se guardan solo en la tablet.
+Al publicar cambios, sube el numero de version de CACHE en sw.js.
