@@ -73,9 +73,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .muted{color:var(--ink2);font-size:13px}
 .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
-.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:16px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-bottom:16px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:0}
-.kpi b{display:block;font:500 17px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi b{display:block;font:500 16px var(--f-mono);font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 .kpi span{font-size:11px;color:var(--ink2)}
 .kpi.good b{color:var(--good)} .kpi.bad b{color:var(--bad)} .kpi.warn b{color:var(--warn)}
 .banner{border-radius:12px;padding:14px 16px;margin-bottom:16px;border:1px solid;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
@@ -131,6 +131,8 @@ svg.ch .zero{stroke:var(--ink2);stroke-width:1.2}
 .kit summary{display:flex;gap:8px;align-items:center;flex-wrap:wrap;cursor:pointer;min-height:48px}
 .eqb{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
 @media (max-width:560px){.line.add{grid-template-columns:minmax(0,1fr) 72px 92px}}
+.picks{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:320px;overflow:auto}.pick{display:grid;grid-template-columns:90px 1fr;gap:2px 10px;text-align:left;min-height:48px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:14px var(--f-body);cursor:pointer}.pick:hover{border-color:var(--brand)}.pick i{grid-column:2;font-style:normal;color:var(--ink2);font-size:12px}
+.line.cost{grid-template-columns:minmax(0,1fr) 150px 44px;margin:6px 0}.alertbox input{background:#fff;color:#53555A}
 </style>
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#25CBD3"><link rel="apple-touch-icon" href="icon-192.png"></head><body><div id="app"></div>
 <script>
@@ -156,8 +158,12 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const NF = d => new Intl.NumberFormat('es-MX', { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const nf0 = NF(0), nf1 = NF(1), nf2 = NF(2);
 const usd = n => (n < 0 ? '-' : '') + 'US$ ' + nf0.format(Math.abs(Math.round(n)));
-const usd2 = n => (n < 0 ? '-' : '') + 'US$ ' + nf2.format(Math.abs(n));
+const usd2 = n => (n < 0 ? '-' : '') + 'US$ ' + new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(n));
 const mxn = n => '$ ' + nf0.format(Math.round(n));
+const nf2f = new Intl.NumberFormat('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const mxn2 = n => '$ ' + nf2f.format(n);
+const mx2 = n => '$ ' + nf2f.format(n) + ' MXN';
+const pct2 = n => (n == null || !isFinite(n) ? '—' : nf2f.format(n) + ' %');
 const mx = n => '$ ' + nf0.format(Math.round(n)) + ' MXN';
 const pct = (n, d) => (n == null || !isFinite(n) ? '—' : NF(d == null ? 1 : d).format(n) + ' %');
 const kfmt = n => { const a = Math.abs(n), s = n < 0 ? '-' : ''; return a >= 1e6 ? s + (a / 1e6).toFixed(1) + 'M' : a >= 1e3 ? s + (a / 1e3).toFixed(a >= 1e4 ? 0 : 1) + 'k' : s + Math.round(a); };
@@ -165,7 +171,7 @@ const todayISO = () => { const d = new Date(); return d.getFullYear() + '-' + St
 
 /* ---------- datos de ejemplo ---------- */
 function seedCatalog() {
-  return ITEMS.map(i => ({ id: 'eq_' + i[0].toLowerCase().replace(/[^a-z0-9]+/g, '_'), parte: i[0], tipo: i[1], nombre: i[2], precio: i[3], costo: COSTOS[i[0]] || 0, w: 0, h: 24, cap: i[8] * 12, insF: i[4], insV: 0, r1: i[5], nota: '' }));
+  return ITEMS.map(i => ({ id: 'eq_' + i[0].toLowerCase().replace(/[^a-z0-9]+/g, '_'), parte: i[0], tipo: i[1], nombre: i[2], precio: i[3], costo: COSTOS[i[0]] || 0, w: 0, h: 24, lph: i[8], hProd: 0, insF: i[4], insV: 0, r1: i[5], nota: '' }));
 }
 
 function seedInsumos() { return INSUMOS.map(x => ({ p: x[0], t: x[1], d: x[2], c: x[3] })); }
@@ -175,11 +181,11 @@ function blankProject(base) {
   return {
     id: uid(), mod: Date.now(), cliente: '', ubicacion: '', industria: '', fecha: todayISO(), folio: '', emisor: 'Purifika',
     tc: b.tc || 20, tarifa: b.tarifa || 3.2, pGar: b.pGar || 35, lGar: b.lGar || 20, pBot: b.pBot || 12, mlBot: b.mlBot || 600,
-    sust: b.sust || 100, dias: b.dias || 365, modo: b.modo || 'venta', costoPct: b.costoPct != null ? b.costoPct : 60, irenta: b.irenta || 0,
+    sust: b.sust || 100, dias: b.dias || 365, modo: 'renta', costoPct: b.costoPct != null ? b.costoPct : 60, irenta: b.irenta || 0,
     horizonte: b.horizonte || 5, tasa: b.tasa != null ? b.tasa : 12, tirObj: b.tirObj != null ? b.tirObj : 20, margenMin: b.margenMin != null ? b.margenMin : 25,
     igasto: b.igasto != null ? b.igasto : 5, icosto: b.icosto != null ? b.icosto : 4, y1: b.y1 !== false,
     iva: b.iva != null ? b.iva : 16, ivaOn: b.ivaOn !== false,
-    visN: b.visN || 0, visC: b.visC || 0, vida: b.vida || 5, resid: b.resid !== false, cfg: {},
+    cats: (b.cats || CATS).slice(), ecoPetBotG: b.ecoPetBotG != null ? b.ecoPetBotG : 15, ecoGarKg: b.ecoGarKg != null ? b.ecoGarKg : 0.75, ecoGarUsos: b.ecoGarUsos != null ? b.ecoGarUsos : 25, ecoFePet: b.ecoFePet != null ? b.ecoFePet : 2.5, ecoDistKm: b.ecoDistKm != null ? b.ecoDistKm : 40, ecoFeKm: b.ecoFeKm != null ? b.ecoFeKm : 0.7, ecoCamionL: b.ecoCamionL != null ? b.ecoCamionL : 4000, ecoFeElec: b.ecoFeElec != null ? b.ecoFeElec : 0.438, envioPct: b.envioPct || 0, promOn: false, promGasto: 0, promLitros: 0, hProd: b.hProd || 8, visN: b.visN || 0, visC: b.visC || 0, vida: b.vida || 5, resid: b.resid !== false, cfg: {},
     descTipo: 'pct', descValor: 0, instCobro: 0, instCosto: 0, descLineas: {}, qAhorro: true,
     notas: 'Precios en dólares estadounidenses (USD). Vigencia de la cotización: 15 días.',
     areas: []
@@ -203,8 +209,8 @@ const LS_OK = (() => { try { localStorage.setItem('__t', '1'); localStorage.remo
 const tm = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 const SYNC_TXT = { ok: ['good', 'Sincronizado con la nube'], pend: ['warn', 'Guardado en la tablet · falta subir a la nube'], off: ['warn', 'Sin conexión · guardado en la tablet'], local: ['', 'App local · datos en esta tablet'], err: ['bad', 'No se pudo sincronizar'] };
 function setSync(st) { UI.sync = st; const el = document.getElementById('syncChip'); if (el) { const x = SYNC_TXT[st] || SYNC_TXT.off; el.className = 'chip ' + x[0]; el.textContent = x[1]; } }
-const UI = { sync: 'off', tab: 'proyectos', fInd: '*', per: 'anio', soloPend: false, nuevo: null, draft: {}, insDraft: {}, openKits: {}, insCatOpen: false, u: { kit: '', ip: '', it: 'Refacción', idsc: '', ic: 0 } };
-function resetNuevo() { UI.nuevo = { mon: 'USD', parte: '', nombre: '', tipo: 'Purificadores y despachadores', precio: 0, r1: 0, costo: 0, lph: 0, w: 0, h: 24, insF: 0, insV: 0 }; }
+const UI = { sync: 'off', tab: 'proyectos', fInd: '*', per: 'anio', soloPend: false, bibF: 'proy', listF: 'proy', bibDraft: {}, nuevo: null, draft: {}, insDraft: {}, openKits: {}, insCatOpen: false, u: { kit: '', ip: '', it: 'Refacción', idsc: '', ic: 0 } };
+function resetNuevo() { UI.nuevo = { mon: 'USD', parte: '', nombre: '', tipo: 'Purificadores y despachadores', precio: 0, r1: 0, costo: 0, lph: 0, hProd: 0, w: 0, h: 24, insF: 0, insV: 0 }; }
 resetNuevo();
 let dirty = new Set(), catDirty = false, insDirty = false, saveT = null;
 
@@ -212,18 +218,19 @@ function loadLocal() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.projects && s.projects.length) return s; } } catch (e) { }
   return null;
 }
+const normCat = () => S.catalog.forEach(c => { if (c.lph == null) c.lph = (c.cap || 0) / 12; if (c.hProd == null) c.hProd = 0; if (c.rech == null) c.rech = 0; });
 function initState(s) {
   S = s || { v: 3, rev: 0, active: 'demo', catalog: seedCatalog(), projects: [seedProject()] };
   if (!S.projects.length) S.projects.push(blankProject());
   S.delQ = S.delQ || [];
-  S.kits = S.kits || {};
+  S.kits = S.kits || {}; normCat();
   if (!Array.isArray(S.insCat) || !S.insCat.length) S.insCat = seedInsumos();
   S.projects.forEach(p => {
     p.descLineas = p.descLineas || {}; p.areas = p.areas || []; if (p.industria == null) p.industria = '';
-    if (p.visN == null) p.visN = 0; if (p.visC == null) p.visC = 0; if (!(p.vida > 0)) p.vida = 5; if (p.resid == null) p.resid = true; p.cfg = p.cfg || {};
+    if (p.visN == null) p.visN = 0; if (p.visC == null) p.visC = 0; if (!(p.vida > 0)) p.vida = 5; if (!(p.hProd > 0)) p.hProd = 8; p.modo = 'renta'; if (p.envioPct == null) p.envioPct = 0; Object.keys(ECO_DEF).forEach(k => { if (p[k] == null) p[k] = ECO_DEF[k]; }); if (!Array.isArray(p.cats) || !p.cats.length) p.cats = CATS.slice(); if (p.promOn == null) { p.promOn = false; p.promGasto = 0; p.promLitros = 0; } if (p.resid == null) p.resid = true; p.cfg = p.cfg || {};
     p.areas.forEach(a => (a.lineas || []).forEach(l => { if (l.eq && !S.kits[l.eq]) S.kits[l.eq] = []; }));
   });
-  if (S.mig !== 5) { S.catalog.forEach(c => { if (!(c.costo > 0) && COSTOS[c.parte]) c.costo = COSTOS[c.parte]; if (c.nota == null) c.nota = ''; }); S.mig = 5; }
+  if (S.mig !== 6) { S.catalog.forEach(c => { if (!(c.costo > 0) && COSTOS[c.parte]) c.costo = COSTOS[c.parte]; if (c.nota == null) c.nota = ''; }); S.mig = 6; }
   P = S.projects.find(p => p.id === S.active) || S.projects[0];
   S.active = P.id;
 }
@@ -286,7 +293,7 @@ async function loadRemote() {
           const ids = rs.ids || projects.map(p => p.id);
           projects.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
           let insR = null; try { const ri = await tm(db.doc('app/insumos').get(), 15000); if (ri.exists) insR = ri.data().items; } catch (e) { }
-          S = { v: 3, mig: rs.mig, rev: rs.rev || 0, active: rs.active, catalog: rs.catalog || S.catalog, kits: rs.kits || {}, insCat: insR || S.insCat, projects };
+          S = JSON.parse(JSON.stringify({ v: 3, mig: rs.mig, rev: rs.rev || 0, active: rs.active, catalog: rs.catalog || S.catalog, kits: rs.kits || {}, insCat: insR || S.insCat, projects }));
           initState(S); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { }
           setSync('ok'); render(); return;
         }
@@ -309,13 +316,14 @@ function irr(cf) {
 
 const insIdx = () => { const m = {}; S.insCat.forEach(x => { m[String(x.p).toLowerCase()] = x; }); return m; };
 function kitOf(id, map) {
-  return (S.kits[id] || []).map(k => { const x = map[String(k.parte).toLowerCase()]; return { parte: k.parte, desc: x ? x.d : '(No. de parte fuera del catálogo)', tipo: x ? x.t : '', costo: x ? x.c : 0, qty: num(k.qty) }; });
+  return (S.kits[id] || []).map(k => { const x = map[String(k.parte).toLowerCase()]; return { parte: k.parte, desc: x ? x.d : '(No. de parte fuera del catálogo)', tipo: x ? x.t : '', costo: x ? x.c : 0, qty: num(k.qty), fuera: !x }; });
 }
 function cfgOf(p, id) {
   const c = (p.cfg && p.cfg[id]) || {};
   return { visN: c.visN != null ? c.visN : (p.visN || 0), visC: c.visC != null ? c.visC : (p.visC || 0), vida: c.vida > 0 ? c.vida : (p.vida > 0 ? p.vida : 5) };
 }
-const eqCosto = (e, p) => (e.costo > 0 ? e.costo : e.precio * (p.costoPct || 0) / 100);
+const esAcc = e => /^accesorio/i.test(String((e && e.tipo) || '').trim());
+const eqCosto = (e, p) => (e.costo > 0 ? e.costo * (1 + Math.max(0, p.envioPct || 0) / 100) : 0);
 function paybackOf(inv, nets) {
   if (inv <= 0) return 0;
   let cum = -inv;
@@ -326,11 +334,13 @@ function calc(p) {
   const eq = Object.fromEntries(S.catalog.map(e => [e.id, e]));
   const imap = insIdx(), kitU = {};
   const unitKit = id => { if (!(id in kitU)) kitU[id] = kitOf(id, imap).reduce((s, k) => s + k.qty * k.costo, 0); return kitU[id]; };
+  const env = 1 + Math.max(0, p.envioPct || 0) / 100;
   const sust = (p.sust || 0) / 100, tc = p.tc || 1, renta = p.modo === 'renta';
   const N = Math.max(1, Math.round(p.horizonte || 5)), ig = (p.igasto || 0) / 100, ic = (p.icosto || 0) / 100, ir = (p.irenta || 0) / 100;
   const r = (p.tasa || 0) / 100, rt = (p.tirObj || 0) / 100;
   const mm = Math.min(95, p.margenMin || 0) / 100;
-  const o = { renta, N, areas: [], eqs: {}, t: { gar: 0, bot: 0, Ld: 0, Lanio: 0, kwh: 0, elec: 0, gasto: 0, gastoMXN: 0, ins: 0, vis: 0, garA: 0, botA: 0 } };
+  const hrsDef = p.hProd > 0 ? p.hProd : 8, capU = e => (e.lph || 0) * (e.hProd > 0 ? e.hProd : hrsDef);
+  const o = { renta, N, hrsDef, areas: [], eqs: {}, t: { gar: 0, bot: 0, Ld: 0, Lanio: 0, kwh: 0, elec: 0, gasto: 0, gastoMXN: 0, ins: 0, vis: 0, garA: 0, botA: 0 } };
   for (const a of p.areas) {
     const dias = a.dias > 0 ? a.dias : p.dias;
     const Lbeb = a.gar * p.lGar + a.bot * p.mlBot / 1000;
@@ -338,17 +348,18 @@ function calc(p) {
     const Lanio = Ld * dias;
     const gastoMXN = (a.gar * p.pGar + a.bot * p.pBot) * dias * sust;
     const lines = a.lineas.filter(l => eq[l.eq] && l.qty > 0);
-    const capTot = lines.reduce((s, l) => s + l.qty * eq[l.eq].cap, 0);
-    const qtyTot = lines.reduce((s, l) => s + l.qty, 0);
-    let ins = 0, kwh = 0, watts = 0, visA = 0;
+    const capTot = lines.reduce((s, l) => s + l.qty * capU(eq[l.eq]), 0);
+    const qtyTot = lines.filter(l => !esAcc(eq[l.eq])).reduce((s, l) => s + l.qty, 0);
+    let ins = 0, kwh = 0, watts = 0, visA = 0, feed = 0;
     const am = {};
     for (const l of lines) {
       const e = eq[l.eq], cf = cfgOf(p, e.id);
-      const share = capTot > 0 ? l.qty * e.cap / capTot : (qtyTot > 0 ? l.qty / qtyTot : 0);
+      const share = esAcc(e) ? 0 : capTot > 0 ? l.qty * capU(e) / capTot : (qtyTot > 0 ? l.qty / qtyTot : 0);
       const hasKit = (S.kits[e.id] || []).length > 0;
-      const base = l.qty * (hasKit ? unitKit(e.id) : e.insF);
-      const vol = Lanio / 1000 * share * e.insV;
-      const vis = l.qty * cf.visN * cf.visC / tc;
+      { const rj = e.lph > 0 ? Math.min(95, Math.max(0, e.rech || 0)) / 100 : 0; feed += Ld * share / (1 - rj); }
+      const base = l.qty * (hasKit ? unitKit(e.id) : e.insF) * env;
+      const vol = Lanio / 1000 * share * e.insV * env;
+      const vis = esAcc(e) ? 0 : l.qty * cf.visN * cf.visC / tc;
       const i = base + vol + vis;
       const k = l.qty * e.w / 1000 * e.h * dias;
       ins += i; kwh += k; watts += l.qty * e.w; visA += vis;
@@ -357,8 +368,8 @@ function calc(p) {
       const m = am[e.id] || (am[e.id] = { e, qty: 0, ins: 0 }); m.qty += l.qty; m.ins += i;
     }
     const ar = {
-      a, dias, Ld, Lanio, gastoMXN, gasto: gastoMXN / tc, ins, kwh, elec: kwh * p.tarifa, cap: capTot, am, vis: visA,
-      uso: capTot > 0 ? Ld / capTot : null, hasEq: lines.length > 0, qty: qtyTot, watts,
+      a, dias, Ld, Lanio, gastoMXN, gasto: gastoMXN / tc, ins, kwh, elec: kwh * p.tarifa, cap: capTot, am, vis: visA, prod: lines.filter(l => eq[l.eq].lph > 0).reduce((s, l) => s + l.qty, 0),
+      feed, rej: Math.max(0, feed - Ld), uso: capTot > 0 ? Ld / capTot : null, hasEq: lines.some(l => !esAcc(eq[l.eq])), qty: qtyTot, watts,
       garA: a.gar * dias * sust, botA: a.bot * dias * sust
     };
     o.areas.push(ar);
@@ -366,8 +377,9 @@ function calc(p) {
     t.gar += a.gar; t.bot += a.bot; t.Ld += Ld; t.Lanio += Lanio; t.kwh += kwh; t.elec += ar.elec;
     t.gasto += ar.gasto; t.gastoMXN += gastoMXN; t.ins += ins; t.vis += visA; t.garA += ar.garA; t.botA += ar.botA;
   }
+  if (p.promOn && p.promGasto > 0) { o.t.gastoMXN = p.promGasto * 12; o.t.gasto = o.t.gastoMXN / tc; }
   /* líneas cotizadas: venta en USD o renta en MXN/mes; con vida útil y depreciación en línea recta */
-  const totalQty = Object.values(o.eqs).reduce((s, g) => s + g.qty, 0);
+  const totalQty = Object.values(o.eqs).reduce((s, g) => s + (esAcc(g.e) ? 0 : g.qty), 0);
   o.totalQty = totalQty;
   o.lines = Object.values(o.eqs).map(g => {
     const d = Math.min(100, Math.max(0, p.descLineas[g.e.id] || 0));
@@ -376,6 +388,12 @@ function calc(p) {
     const costo = eqCosto(g.e, p) * g.qty, vida = g.cf.vida, dep = costo / vida;
     return Object.assign({}, g, { d, unit, lista, final: lista * (1 - d / 100), costo, kitLines: kitOf(g.e.id, imap), vida, depAnual: dep, depAcum: dep * Math.min(N, vida), vlibros: Math.max(0, costo - dep * N) });
   });
+  o.missEq = o.lines.filter(l => !(l.e.costo > 0)).map(l => l.e);
+  const mi = {}; o.lines.forEach(l => l.kitLines.forEach(k => { if (!(k.costo > 0) && !mi[k.parte]) mi[k.parte] = { parte: k.parte, desc: k.desc, eq: l.e }; }));
+  o.missIns = Object.values(mi);
+  o.missRech = o.lines.filter(l => l.e.lph > 0 && !(l.e.rech > 0)).map(l => l.e);
+  o.missKit = o.lines.filter(l => !esAcc(l.e) && !l.hasKit && !(l.e.insF > 0)).map(l => l.e);
+  o.faltan = o.missEq.length + o.missIns.length + o.missKit.length > 0;
   o.sumLista = o.lines.reduce((s, l) => s + l.lista, 0);
   o.sumFinal = o.lines.reduce((s, l) => s + l.final, 0);
   o.depAnual = o.lines.reduce((s, l) => s + l.depAnual, 0);
@@ -390,7 +408,7 @@ function calc(p) {
   })).filter(b => b.rows.length);
   o.inst = (p.instCobro || 0) / tc;        /* se captura en MXN */
   o.instCostoUSD = (p.instCosto || 0) / tc;
-  o.hasEq = o.lines.length > 0;
+  o.hasEq = o.lines.some(l => !esAcc(l.e));
   o.costoEq = o.lines.reduce((s, l) => s + l.costo, 0);
   const elec1 = o.t.elec / tc, ins1 = o.t.ins, gasto1 = o.t.gasto;
   if (!renta) {
@@ -436,7 +454,7 @@ function calc(p) {
   o.ahorro1 = o.flows[0].F; o.ahorroPct = gasto1 > 0 ? o.flows[0].F / gasto1 * 100 : null;
   o.ahorroTot = sumF - inv;
   if (!renta) {
-    o.sellerOk = o.hasEq && o.precio > 0 && o.margenPct != null && o.margenPct >= (p.margenMin || 0) - 1e-9;
+    o.sellerOk = o.hasEq && !o.faltan && o.precio > 0 && o.margenPct != null && o.margenPct >= (p.margenMin || 0) - 1e-9;
     o.clientOk = o.hasEq && o.van > 0 && (o.tir === Infinity || (o.tir != null && o.tir * 100 >= (p.tirObj || 0)));
   } else {
     /* flujos del vendedor que renta: invierte equipos e instalación, cobra renta, paga insumos y visitas, y conserva el valor residual */
@@ -457,22 +475,30 @@ function calc(p) {
     o.rentaMinMes = o.rentaMinAnual * tc / 12;
     o.rentaMaxMes = Math.max(0, (gasto1 - elec1) * tc / 12);
     o.maxDescPct = o.sumLista > 0 ? Math.max(0, (1 - o.rentaMinMes / o.sumLista) * 100) : 0;
-    o.sellerOk = o.hasEq && o.rentaMes > 0 && o.sVan > 0 && (o.sTir === Infinity || (o.sTir != null && o.sTir * 100 >= (p.tirObj || 0)));
+    o.sellerOk = o.hasEq && !o.faltan && o.rentaMes > 0 && o.sVan > 0 && (o.sTir === Infinity || (o.sTir != null && o.sTir * 100 >= (p.tirObj || 0)));
     o.clientOk = o.hasEq && o.ahorro1 > 0 && o.ahorroTot > 0;
   }
   /* rentabilidad por equipo / modelo */
   o.plines = o.lines.map(l => {
-    const x = { l };
+    const x = { l }, falta = !(l.e.costo > 0), dtxt = l.d > 0 ? ` Descuento manual aplicado: ${pct(l.d, 1)}.` : '';
     if (!renta) {
       const k = o.sub > 0 ? o.precio / o.sub : 0;
       x.ingreso = l.final * k; x.insY1 = p.y1 ? l.ins : 0; x.costoT = l.costo + x.insY1;
       x.margen = x.ingreso - x.costoT; x.margenPct = x.ingreso > 0 ? x.margen / x.ingreso * 100 : null;
       x.pMin = x.costoT / (1 - mm);
-      x.ok = l.unit > 0 && x.margenPct != null && x.margenPct >= (p.margenMin || 0) - 1e-9;
+      x.okM = x.margenPct != null && x.margenPct >= (p.margenMin || 0) - 1e-9;
+      const share = o.sumFinal > 0 ? l.final / o.sumFinal : 0, cfl = [];
+      for (let t = 1; t <= N; t++) cfl.push(share * gasto1 * Math.pow(1 + ig, t - 1) - ((t === 1 && p.y1) ? 0 : l.ins * Math.pow(1 + ic, t - 1)) - share * elec1 * Math.pow(1 + ic, t - 1));
+      x.tirC = irr([-x.ingreso].concat(cfl)); x.vanC = -x.ingreso + cfl.reduce((s, v, i) => s + v / Math.pow(1 + r, i + 1), 0);
+      x.okT = x.tirC === Infinity || (x.tirC != null && x.tirC * 100 >= (p.tirObj || 0));
+      x.ok = l.unit > 0 && !falta && x.okM && x.okT;
+      x.nota = falta ? 'Falta el costo de compra de este equipo ($0): captúralo para evaluarlo.' : !(l.unit > 0) ? 'Falta el precio de venta de este equipo en la lista de precios.'
+        : x.ok ? `Rentable. Margen ${pct(x.margenPct)} (mínimo ${pct(p.margenMin, 0)}) y TIR del cliente ${tirTxtOf(x.tirC)} (objetivo ${pct(p.tirObj, 0)}), ya con insumos y visitas del año 1 por ${usd(x.insY1)}.${dtxt}`
+        : 'No rentable. ' + [!x.okM ? `El margen es ${pct(x.margenPct)}, debajo del mínimo de ${pct(p.margenMin, 0)}: el precio mínimo es ${usd(x.pMin)} y hoy cobras ${usd(x.ingreso)}.` : '', !x.okT ? `La TIR del cliente es ${tirTxtOf(x.tirC)}, debajo del objetivo de ${pct(p.tirObj, 0)}.` : ''].filter(Boolean).join(' ') + dtxt;
     } else {
       const f = o.sumFinal > 0 ? o.rentaMes / o.sumFinal : 0;
-      x.inc1 = l.final * f * 12 / tc;
-      const nets = []; for (let t = 1; t <= N; t++) nets.push(x.inc1 * Math.pow(1 + ir, t - 1) - l.ins * Math.pow(1 + ic, t - 1));
+      x.inc1 = l.final * f * 12 / tc; x.rentaMes = x.inc1 * tc / 12;
+      const nets = [], csts = []; for (let t = 1; t <= N; t++) { const cst = l.ins * Math.pow(1 + ic, t - 1); csts.push(cst); nets.push(x.inc1 * Math.pow(1 + ir, t - 1) - cst); }
       x.res = p.resid ? l.vlibros : 0;
       const fl = nets.map((v, i) => v + (i === N - 1 ? x.res : 0));
       x.I0 = l.costo;
@@ -481,10 +507,22 @@ function calc(p) {
       x.roi = x.I0 > 0 ? (fl.reduce((a, b) => a + b, 0) - x.I0) / x.I0 * 100 : null;
       x.payback = paybackOf(x.I0, fl);
       x.util1 = x.inc1 - l.ins; x.utilDep = x.util1 - l.depAnual;
-      x.ok = l.unit > 0 && x.van > 0 && (x.tir === Infinity || (x.tir != null && x.tir * 100 >= (p.tirObj || 0)));
+      const need = rate => { const den = csts.reduce((s, c, i) => s + Math.pow(1 + ir, i) / Math.pow(1 + rate, i + 1), 0); const num = x.I0 + csts.reduce((s, c, i) => s + c / Math.pow(1 + rate, i + 1), 0) - x.res / Math.pow(1 + rate, N); return den > 0 ? Math.max(0, num / den) : 0; };
+      x.rentaMinMes = Math.max(need(r), need(rt)) * tc / 12;
+      x.okT = x.van > 0 && (x.tir === Infinity || (x.tir != null && x.tir * 100 >= (p.tirObj || 0)));
+      x.ok = l.unit > 0 && !falta && x.okT;
+      x.nota = falta ? 'Falta el costo de compra de este equipo ($0): captúralo para evaluarlo.' : !(l.unit > 0) ? 'Falta la renta (Lista 1) de este equipo en la lista de precios.'
+        : x.ok ? `Rentable. TIR ${tirTxtOf(x.tir)} (mínima ${pct(p.tirObj, 0)}) y VAN ${mx(x.van * tc)}, ya con insumos y visitas por ${usd(l.ins)} al año.${dtxt}`
+        : `No rentable. La TIR es ${tirTxtOf(x.tir)}, debajo de la mínima de ${pct(p.tirObj, 0)} (VAN ${mx(x.van * tc)}). La renta mínima para este equipo es ${mx(x.rentaMinMes)} al mes y hoy cobras ${mx(x.rentaMes)}.${dtxt}`;
     }
     return x;
   });
+  /* promedio mensual global */
+  { const tcm = tc, gM = p.promGasto > 0 ? p.promGasto : o.t.gastoMXN / 12, lM = p.promLitros > 0 ? p.promLitros : o.t.Lanio / 12;
+    const insM = o.t.ins * tcm / 12, elecM = o.t.elec / 12;
+    const pagoM = renta ? o.rentaMes : 0, amortM = (renta ? o.inst : o.precio) * tcm / (N * 12);
+    const operM = (renta ? pagoM : insM) + elecM, costoM = operM + amortM;
+    o.prom = { gM, lM, usaProm: p.promGasto > 0, insM, elecM, pagoM, amortM, operM, costoM, ahorroOper: gM - operM, ahorroNeto: gM - costoM, margenOper: gM > 0 ? (gM - operM) / gM * 100 : null, margenNeto: gM > 0 ? (gM - costoM) / gM * 100 : null, cplAct: lM > 0 ? gM / lM : null, cplNuevo: lM > 0 ? costoM / lM : null }; }
   return o;
 }
 
@@ -540,6 +578,7 @@ function resolve(key) {
   if (t === 'n') return { o: UI.nuevo, k: x[1] };
   if (t === 's') return { o: draftOf(x[1]), k: x[2] };
   if (t === 'u') return { o: UI.u, k: x[1] };
+  if (t === 'b') { const c = S.catalog.find(c => c.id === x[1]); if (!c) return null; return { o: UI.bibDraft[x[1]] || (UI.bibDraft[x[1]] = {}), k: x[2] }; }
   if (t === 'q') return { o: insDraft(x[1]), k: x[2] };
   if (t === 'k') return { o: S.kits[x[1]] && S.kits[x[1]][+x[2]], k: x[3] };
   if (t === 'i') return { o: S.insCat[+x[1]], k: x[2] };
@@ -548,15 +587,16 @@ function resolve(key) {
 }
 function fld(label, bind, o) {
   o = o || {}; const type = o.type || 'number', v = readBind(bind);
-  const attrs = type === 'number' ? `inputmode="decimal" step="${o.step || 'any'}" min="${o.min != null ? o.min : 0}"` : '';
-  return `<label class="fld"><span>${esc(label)}</span><span class="inp"><input data-b="${bind}" type="${type}" ${attrs} value="${esc(v)}"${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>${o.suf ? `<i>${esc(o.suf)}</i>` : ''}</span>${o.hint ? `<small>${esc(o.hint)}</small>` : ''}</label>`;
+  const isNum = type === 'number', shown = isNum && (v === 0 || v === '0') ? '' : v;
+  const attrs = isNum ? 'inputmode="decimal" data-num="1" autocomplete="off"' : '';
+  return `<label class="fld"><span>${esc(label)}</span><span class="inp"><input data-b="${bind}" type="${isNum ? 'text' : type}" ${attrs} value="${esc(shown)}"${o.ph ? ` placeholder="${esc(o.ph)}"` : (isNum ? ' placeholder="0"' : '')}>${o.suf ? `<i>${esc(o.suf)}</i>` : ''}</span>${o.hint ? `<small>${esc(o.hint)}</small>` : ''}</label>`;
 }
 function sel(label, bind, opts, o) {
   const v = readBind(bind);
   return `<label class="fld"><span>${esc(label)}</span><select data-b="${bind}">${opts.map(x => { const val = Array.isArray(x) ? x[0] : x, lab = Array.isArray(x) ? x[1] : x; return `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}</select></label>`;
 }
 function chk(label, bind) { return `<label class="chk"><input type="checkbox" data-b="${bind}"${readBind(bind) ? ' checked' : ''}> ${esc(label)}</label>`; }
-const eqName = e => (e.parte ? e.parte + ' · ' : '') + e.nombre;
+const eqName = e => (e.parte ? e.parte + ' · ' : '') + e.nombre + (esAcc(e) ? ' (accesorio)' : '');
 function eqOptions() { const rn = P.modo === 'renta'; return S.catalog.map(e => { const v = rn ? e.r1 : e.precio; return [e.id, eqName(e) + (v > 0 ? ' — ' + (rn ? mx(v) + '/mes' : usd(v)) : '')]; }); }
 function discPanel() {
   const rn = P.modo === 'renta';
@@ -580,6 +620,7 @@ function industriaFld() {
 }
 function statusOf(o) {
   if (!o.hasEq) return ['', 'Sin equipos'];
+  if (o.faltan) return ['warn', 'Faltan costos'];
   if (o.sellerOk && o.clientOk) return ['good', 'Rentable'];
   if (!o.sellerOk && o.clientOk) return ['bad', 'Bajo tu mínimo'];
   if (o.sellerOk && !o.clientOk) return ['warn', 'Sin retorno para el cliente'];
@@ -616,8 +657,9 @@ function tabProyecto() {
     ${fld('Fecha', 'p:fecha', { type: 'date' })}
     ${fld('Folio', 'p:folio', { type: 'text', ph: 'Opcional' })}
     ${fld('Emisor de la cotización', 'p:emisor', { type: 'text' })}
-    ${sel('Modelo de negocio', 'p:modo', [['venta', 'Venta de equipo (USD)'], ['renta', 'Renta mensual (MXN, Lista 1)']])}
+    <label class="fld"><span>Modelo de negocio</span><input type="text" value="Renta mensual (MXN, Lista 1)" readonly></label>
   </div></div>
+  ${catsPanel()}
   <div class="panel"><h2>Gasto actual y tarifas</h2>
   <p class="muted" style="margin:0 0 12px">Lo que el cliente paga hoy por garrafones y botellas. Los valores de arranque son de ejemplo, salvo el tipo de cambio de la lista de precios: ajústalos con los datos del cliente.</p>
   <div class="grid">
@@ -629,13 +671,14 @@ function tabProyecto() {
     ${fld('Tamaño de botella', 'p:mlBot', { suf: 'ml' })}
     ${fld('Consumo sustituido', 'p:sust', { suf: '%', hint: 'Parte del agua embotellada que reemplazan tus equipos' })}
     ${fld('Días de operación al año', 'p:dias', { suf: 'días', hint: 'Cada área puede tener los suyos' })}
+    ${fld('Horas de producción por día', 'p:hProd', { suf: 'horas', hint: 'Capacidad de un purificador = L/hora × estas horas. Cada modelo puede tener las suyas en la Lista de precios' })}
   </div></div>
   <div class="panel"><h2>Parámetros financieros</h2><div class="grid">
     ${sel('Horizonte de análisis', 'p:horizonte', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [n, n + (n === 1 ? ' año' : ' años')]))}
     ${fld('Tasa de descuento (VAN)', 'p:tasa', { suf: '% anual' })}
     ${fld(rn ? 'TIR mínima para ti' : 'TIR mínima del cliente', 'p:tirObj', { suf: '%', hint: rn ? 'Umbral de tu inversión en equipos rentados' : 'Umbral para marcar el proyecto como rentable' })}
+    ${fld('Costo de envío (incremento a equipos e insumos)', 'p:envioPct', { suf: '%', hint: 'Se suma al costo de compra de equipos e insumos' })}
     ${rn ? '' : fld('Margen mínimo para ti', 'p:margenMin', { suf: '%', hint: 'Define el precio mínimo de venta' })}
-    ${fld('Costo estimado del equipo', 'p:costoPct', { suf: '% del precio', hint: 'Se usa cuando el equipo no tiene costo capturado' })}
     ${fld('Alza anual del gasto actual', 'p:igasto', { suf: '%' })}
     ${fld('Alza anual de insumos y electricidad', 'p:icosto', { suf: '%' })}
     ${rn ? fld('Alza anual de la renta', 'p:irenta', { suf: '%' }) : ''}
@@ -650,7 +693,7 @@ function areaCard(ar) {
   return `<div class="area" data-area="${a.id}">
   <header>
     ${fld('Área', `a:${a.id}:nombre`, { type: 'text' })}
-    ${sel('Categoría', `a:${a.id}:cat`, CATS)}
+    ${sel('Categoría', `a:${a.id}:cat`, catsOf(a.cat))}
     <button class="btn danger sm" data-act="delArea" data-id="${a.id}">Eliminar área</button>
   </header>
   <div class="grid">
@@ -670,12 +713,31 @@ function areaCard(ar) {
     <input type="number" inputmode="numeric" min="1" step="1" data-b="s:${a.id}:qty" value="${esc(dr.qty)}" aria-label="Cantidad por agregar">
     <button class="btn primary sm" data-act="saveLine" data-id="${a.id}">Guardar</button>
   </div>
+  ${(() => { const e = cat[dr.eq]; return e && !(e.costo > 0) ? `<div class="banner bad alertbox" style="margin:10px 0 0"><div style="flex:1;min-width:240px"><strong>${esc(e.parte || e.nombre)} no tiene costo de compra ($0)</strong><p>Captúralo ahora en USD para que el margen y la rentabilidad cuenten con él.</p><div class="line cost"><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="c:${e.id}:costo" value="" placeholder="Costo de compra" aria-label="Costo de compra USD"><span class="muted">USD</span></div></div></div>` : ''; })()}
   <div class="out" id="ao-${a.id}"></div></div>`;
 }
 
+function faltanBanner() {
+  const o = R; if (!o || !o.faltan) return '';
+  const cat = S.insCat;
+  const eqs = o.missEq.map(e => `<div class="line cost"><div class="ln"><b>${esc(eqName(e))}</b></div><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="c:${e.id}:costo" value="" placeholder="Costo de compra" aria-label="Costo de compra USD"><span class="muted">USD</span></div>`).join('');
+  const ins = o.missIns.map(x => { const ix = cat.findIndex(c => String(c.p).toLowerCase() === String(x.parte).toLowerCase()); return `<div class="line cost"><div class="ln"><b class="mono">${esc(x.parte)}</b> · ${esc(x.desc)}</div>${ix >= 0 ? `<input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="i:${ix}:c" value="" placeholder="Costo de compra" aria-label="Costo del insumo USD"><span class="muted">USD</span>` : '<span class="muted">Agrégalo al catálogo de insumos</span>'}</div>`; }).join('');
+  const kl = o.missKit.map(e => `<div class="line cost"><div class="ln"><b>${esc(eqName(e))}</b> · sin insumos registrados ni póliza de referencia</div><button class="btn sm" data-act="goTab" data-v="ins">Registrar insumos</button></div>`).join('');
+  return `<div class="banner bad alertbox"><div style="flex:1;min-width:260px"><strong>Faltan costos: ningún costo debe quedar en $0</strong><p>Captura el costo de compra en USD de lo que se usa en este proyecto. Mientras falte alguno, el proyecto no se marca como rentable.</p>
+  ${o.missEq.length ? `<h3 style="margin:10px 0 6px;color:inherit">Equipos sin costo de compra</h3>${eqs}` : ''}${o.missIns.length ? `<h3 style="margin:10px 0 6px;color:inherit">Insumos sin costo de compra</h3>${ins}` : ''}${o.missKit.length ? `<h3 style="margin:10px 0 6px;color:inherit">Modelos sin costo de insumos</h3>${kl}` : ''}</div></div>`;
+}
+
+const catsOf = extra => { const l = (P.cats && P.cats.length ? P.cats : CATS).slice(); if (extra && l.indexOf(extra) < 0) l.push(extra); return l; };
+function catsPanel() {
+  const uso = c => P.areas.filter(a => a.cat === c).length;
+  return `<div class="panel"><h2>Categorías de las áreas</h2>
+  <p class="muted" style="margin:0 0 12px">Define las categorías que se podrán elegir en la pestaña de áreas y equipos. Quitar una categoría no cambia las áreas que ya la usan.</p>
+  <div class="bar" style="margin-bottom:12px">${P.cats.map((c, i) => `<span class="chip" style="font-size:14px;padding:6px 6px 6px 12px">${esc(c)}${uso(c) ? ' · ' + uso(c) : ''} <button type="button" class="btn sm" data-act="delCat" data-i="${i}" aria-label="Quitar ${esc(c)}" style="padding:0 8px;min-height:28px">×</button></span>`).join('') || '<span class="muted">Sin categorías: agrega al menos una.</span>'}</div>
+  <div class="bar" style="align-items:flex-end"><div style="flex:1 1 240px">${fld('Nueva categoría', 'u:newCat', { type: 'text', ph: 'Ej. Restaurante' })}</div><button class="btn primary" data-act="addCat">Agregar categoría</button><button class="btn" data-act="resetCats">Restablecer</button></div></div>`;
+}
 function tabAreas() {
-  return `<div class="bar" style="margin-bottom:12px"><span class="muted">Agregar área:</span>
-    ${CATS.map(c => `<button class="btn sm" data-act="addArea" data-cat="${esc(c)}">+ ${esc(c)}</button>`).join('')}<span style="flex:1"></span><button class="btn sm" data-act="goTab" data-v="lista">¿Falta un equipo? Agrégalo a la lista</button></div>
+  return `${faltanBanner()}<div class="bar" style="margin-bottom:12px"><span class="muted">Agregar área:</span>
+    ${catsOf().map(c => `<button class="btn sm" data-act="addArea" data-cat="${esc(c)}">+ ${esc(c)}</button>`).join('')}<span style="flex:1"></span><button class="btn sm" data-act="goTab" data-v="lista">¿Falta un equipo? Agrégalo a la lista</button></div>
   <div id="areasWrap">${P.areas.length ? R.areas.map(areaCard).join('') : '<div class="panel muted">Empieza agregando las áreas del proyecto (cocina, bar, habitaciones…) y captura su consumo diario.</div>'}</div>
   <div class="panel"><h2>Proyección de insumos a 1 año, por equipo</h2><div id="insOut"></div></div>`;
 }
@@ -688,25 +750,27 @@ function suggestFor(e) {
 function kitCard(e, isUsed) {
   const kit = kitOf(e.id, insIdx()), g = R.eqs[e.id], dr = insDraft(e.id), sug = suggestFor(e);
   const open = UI.openKits[e.id] != null ? UI.openKits[e.id] : isUsed;
-  const rows = kit.map((k, i) => `<tr><td class="mono">${esc(k.parte)}</td><td style="min-width:240px">${esc(k.desc)}</td><td>${esc(k.tipo)}</td><td class="n">${usd2(k.costo)}</td>
+  const rows = kit.map((k, i) => `<tr><td class="mono">${esc(k.parte)}</td><td style="min-width:240px">${esc(k.desc)}</td><td>${esc(k.tipo)}</td><td class="n">${k.costo > 0 ? usd2(k.costo) : (k.fuera ? '<span class="chip bad">Fuera del catálogo</span>' : (() => { const ix = S.insCat.findIndex(c => String(c.p).toLowerCase() === String(k.parte).toLowerCase()); return `<span class="chip bad">$0 · captura el costo</span><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="i:${ix}:c" value="" placeholder="USD" style="width:90px;margin-top:4px" aria-label="Costo del insumo USD">`; })())}</td>
     <td><input type="number" inputmode="decimal" step="any" min="0" data-b="k:${e.id}:${i}:qty" value="${esc(k.qty)}" style="width:92px" aria-label="Cantidad por año"></td><td class="n" id="kt-${e.id}-${i}"></td>
     <td><button class="btn danger sm" data-act="delKit" data-id="${e.id}" data-i="${i}" aria-label="Quitar insumo">✕</button></td></tr>`).join('');
   return `<details class="kit" data-kit="${e.id}"${open ? ' open' : ''}><summary><b>${esc(eqName(e))}</b>
-    <span class="chip ${kit.length ? 'good' : 'warn'}">${kit.length ? kit.length + (kit.length === 1 ? ' insumo' : ' insumos') : 'Sin insumos'}</span>${g ? `<span class="chip">En el proyecto: ${g.qty}</span>` : ''}<span class="mono" style="margin-left:auto" id="ku-${e.id}"></span></summary>
+    <span class="chip ${kit.length ? 'good' : 'warn'}">${kit.length ? kit.length + (kit.length === 1 ? ' insumo' : ' insumos') : 'Sin insumos'}</span>${e.lph > 0 ? `<span class="chip ${e.rech > 0 ? 'good' : 'warn'}">${e.rech > 0 ? 'Rechazo ' + nf1.format(e.rech) + ' %' : 'Sin % de rechazo'}</span>` : ''}${g ? `<span class="chip">En el proyecto: ${g.qty}</span>` : ''}<span class="mono" style="margin-left:auto" id="ku-${e.id}"></span></summary>
+    ${e.lph > 0 ? `<div class="grid" style="margin:10px 0">${fld('Rechazo de agua (ósmosis inversa)', `c:${e.id}:rech`, { suf: '%', hint: 'Del agua de alimentación, la parte que sale como rechazo. Se usa en Reportes.' })}</div>` : '<p class="muted" style="margin:10px 0">Despachador: no produce agua, no aplica rechazo.</p>'}
     <div class="tw"><table class="t"><thead><tr><th>No. parte</th><th>Descripción</th><th>Tipo</th><th class="n">Costo USD</th><th>Cant. por equipo al año</th><th class="n">Total USD</th><th></th></tr></thead><tbody>
     ${rows || '<tr><td colspan="7" class="muted">Aún no hay insumos. Agrega el No. de parte y la cantidad que usa un equipo en un año.</td></tr>'}</tbody></table></div>
-    <div class="line add" style="margin-top:10px"><input type="text" list="insDl" data-b="q:${e.id}:parte" value="${esc(dr.parte)}" placeholder="No. de parte (elige de la lista o escribe)" aria-label="No. de parte"><input type="number" inputmode="decimal" step="any" min="0" data-b="q:${e.id}:qty" value="${esc(dr.qty)}" aria-label="Cantidad por año"><button class="btn primary sm" data-act="addKit1" data-id="${e.id}">Guardar</button></div>
+    <div class="line add" style="margin-top:10px"><input type="search" autocomplete="off" data-b="q:${e.id}:parte" value="${esc(dr.parte)}" placeholder="Busca por No. de parte o descripción (ej. membrana, PT110)" aria-label="Buscar insumo"><input type="number" inputmode="decimal" step="any" min="0" data-b="q:${e.id}:qty" value="${esc(dr.qty)}" aria-label="Cantidad por año"><button class="btn primary sm" data-act="addKit1" data-id="${e.id}">Guardar</button></div>
+    <div class="picks" id="ir-${e.id}"></div>
     ${sug.length ? `<div class="bar" style="margin-top:8px"><span class="muted">Compatibles según su descripción:</span>${sug.map(x => `<button class="btn sm" data-act="addSug" data-id="${e.id}" data-p="${esc(x.p)}" title="${esc(x.d)}">+ ${esc(x.p)} · ${esc(x.d.length > 38 ? x.d.slice(0, 36) + '…' : x.d)}</button>`).join('')}</div>` : ''}
   </details>`;
 }
 function tabIns() {
-  const used = R.lines.map(l => l.e), usedIds = new Set(used.map(e => e.id));
-  const others = S.catalog.filter(e => S.kits[e.id] && !usedIds.has(e.id));
-  const free = S.catalog.filter(e => !S.kits[e.id]);
+  const used = R.lines.map(l => l.e).filter(e => !esAcc(e)), usedIds = new Set(used.map(e => e.id));
+  const others = S.catalog.filter(e => !esAcc(e) && S.kits[e.id] && !usedIds.has(e.id));
+  const free = S.catalog.filter(e => !esAcc(e) && !S.kits[e.id]);
   const n = UI.u, q = x => esc(x);
   const catRows = UI.insCatOpen ? S.insCat.map((x, i) => `<tr data-q="${esc((x.p + ' ' + x.d + ' ' + x.t).toLowerCase())}"><td class="mono">${esc(x.p)}</td><td>${esc(x.t)}</td><td style="min-width:300px">${esc(x.d)}</td><td><input type="number" inputmode="decimal" step="any" min="0" data-b="i:${i}:c" value="${esc(x.c)}" style="width:110px"></td></tr>`).join('') : '';
-  return `<div class="banner info"><div><strong>Registro de insumos por modelo</strong><p>Cada modelo se registra una sola vez y su lista de insumos (No. de parte y cantidad por año) se usa en todas las áreas y proyectos. Al guardar un equipo en un área, su modelo aparece aquí. Costos de compra en USD del reporte de productos. Los modelos sin insumos usan la póliza anual de la lista como referencia.</p></div></div>
-  <datalist id="insDl">${S.insCat.map(x => `<option value="${esc(x.p)}">${esc(x.d)} · US$ ${esc(x.c)}</option>`).join('')}</datalist>
+  return `${faltanBanner()}<div class="banner info"><div><strong>Registro de insumos por modelo</strong><p>Cada modelo se registra una sola vez y su lista de insumos (No. de parte y cantidad por año) se usa en todas las áreas y proyectos. Al guardar un equipo en un área, su modelo aparece aquí. Costos de compra en USD del reporte de productos. Los modelos sin insumos usan la póliza anual de la lista como referencia.</p></div></div>
+  ${S.insCat.length ? '' : `<div class="banner warn"><div><strong>El catálogo de insumos está vacío</strong><p>Esta app no trae tus costos. Restaura un respaldo guardado desde la versión con la nube (Lista de precios, Restaurar respaldo) o pega aquí las filas copiadas de tu Excel: No. de parte, Tipo, Descripción y Costo USD.</p><textarea data-b="u:imp" placeholder="64.51&#9;Membranas&#9;Membrana para equipos PT110&#9;68">${esc(UI.u.imp || '')}</textarea><button class="btn primary" data-act="importIns" style="margin-top:8px">Importar insumos</button></div></div>`}
   <div class="panel"><h2>Modelos del proyecto actual</h2>${used.length ? used.map(e => kitCard(e, true)).join('') : '<p class="muted">Cuando guardes equipos en las áreas, sus modelos aparecerán aquí, uno por modelo.</p>'}</div>
   ${others.length ? `<div class="panel"><h2>Otros modelos registrados</h2>${others.map(e => kitCard(e, false)).join('')}</div>` : ''}
   <div class="panel"><h2>Registrar otro modelo</h2><div class="line add"><select data-b="u:kit" aria-label="Modelo"><option value="">Selecciona un modelo…</option>${free.map(e => `<option value="${e.id}"${n.kit === e.id ? ' selected' : ''}>${esc(eqName(e))}</option>`).join('')}</select><span></span><button class="btn primary sm" data-act="addKit">Guardar</button></div>
@@ -718,6 +782,12 @@ function tabIns() {
       ${fld('No. de parte', 'u:ip', { type: 'text' })}${fld('Tipo', 'u:it', { type: 'text' })}<label class="fld" style="grid-column:span 2"><span>Descripción</span><input type="text" data-b="u:idsc" value="${q(n.idsc)}"></label>${fld('Costo de compra', 'u:ic', { suf: 'USD' })}</div>
     <div class="bar" style="margin-top:12px"><button class="btn primary" data-act="addInsumo">Guardar insumo</button></div>` : '<p class="muted" style="margin:8px 0 0">Los costos vienen del reporte de productos. Si cambia un costo, edítalo aquí y se actualizan todas las proyecciones.</p>'}</div>`;
 }
+function showIns(id, val) {
+  const w = String(val || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!w.length) { setO('ir-' + id, ''); return; }
+  const res = S.insCat.filter(x => { const h = (x.p + ' ' + x.t + ' ' + x.d).toLowerCase(); return w.every(k => h.includes(k)); }).slice(0, 30);
+  setO('ir-' + id, res.length ? res.map(x => `<button type="button" class="pick" data-act="pickIns" data-id="${id}" data-p="${esc(x.p)}"><b class="mono">${esc(x.p)}</b><span>${esc(x.d)}</span><i>${esc(x.t)} · US$ ${nf2.format(x.c)}</i></button>`).join('') : '<p class="muted" style="margin:6px 0">Sin resultados. Prueba con otra palabra o agrégalo al catálogo de insumos.</p>');
+}
 function paintIns() {
   const imap = insIdx();
   Object.keys(S.kits).forEach(id => {
@@ -728,39 +798,44 @@ function paintIns() {
 }
 
 function tabLista() {
-  const sinCosto = S.catalog.filter(c => !(c.costo > 0)).length, sinPrecio = S.catalog.filter(c => !(c.precio > 0)).length;
+  const sinCosto = S.catalog.filter(c => !(c.costo > 0)).length, sinPrecio = S.catalog.filter(c => !(c.r1 > 0)).length;
   const n = UI.nuevo;
-  const tipos = Array.from(new Set(S.catalog.map(c => c.tipo))).filter(Boolean);
+  const tipos = Array.from(new Set(S.catalog.map(c => c.tipo).concat(['Accesorios']))).filter(Boolean);
+  const tiposN = tipos.indexOf(n.tipo) < 0 ? tipos.concat([n.tipo]) : tipos;
+  const nAcc = S.catalog.filter(esAcc).length;
   const nf = (label, key, o) => fld(label, 'n:' + key, o);
-  return `<div class="banner ${sinCosto ? 'warn' : 'info'}"><div><strong>Lista de precios · enero 2026</strong><p>${S.catalog.length} equipos con venta en USD, renta mensual en MXN (Lista 1) y tu costo de compra en USD. ${sinCosto ? `${sinCosto} equipos aún sin costo de compra: se estiman como un porcentaje de su precio de venta.` : 'Todos tienen costo de compra.'}${sinPrecio ? ` ${sinPrecio} sin precio de venta.` : ''} El consumo eléctrico se registra en la biblioteca.</p></div></div>
+  const usedIdsL = new Set(R.lines.map(l => l.e.id)), lf = UI.listF, rowsCat = S.catalog.filter(c => lf === 'all' || (lf === 'acc' ? esAcc(c) : usedIdsL.has(c.id)));
+  return `<div class="banner ${sinCosto ? 'warn' : 'info'}"><div><strong>Lista de precios · enero 2026</strong><p>${S.catalog.length} equipos con renta mensual en MXN (Lista 1) y tu costo de compra en USD. ${sinCosto ? `${sinCosto} equipos sin costo de compra (aparecen en $0 en naranja): la app te pedirá capturarlo cuando los uses en un proyecto.` : 'Todos tienen costo de compra.'}${sinPrecio ? ` ${sinPrecio} sin renta (Lista 1).` : ''} El consumo eléctrico se registra en la biblioteca.</p></div></div>
   <div class="panel"><h2>Agregar equipo nuevo</h2>
     <div class="grid">
       ${nf('No. de parte', 'parte', { type: 'text' })}
       <label class="fld" style="grid-column:span 2"><span>Descripción</span><input type="text" data-b="n:nombre" value="${esc(n.nombre)}"></label>
-      <label class="fld"><span>Tipo</span><input type="text" data-b="n:tipo" list="tiposDl" value="${esc(n.tipo)}"><datalist id="tiposDl">${tipos.map(t => `<option value="${esc(t)}">`).join('')}</datalist></label>
+      ${sel('Tipo', 'n:tipo', tiposN)}
       ${sel('Moneda del precio, costo e insumos', 'n:mon', ['USD', 'MXN'])}
-      ${nf('Precio de venta', 'precio', { suf: n.mon })}
       ${nf('Renta mensual (Lista 1)', 'r1', { suf: 'MXN' })}
       ${nf('Costo de compra', 'costo', { suf: n.mon })}
-      ${nf('Capacidad', 'lph', { suf: 'L/hora' })}
+      ${nf('Capacidad de producción', 'lph', { suf: 'L/hora', hint: '0 si es despachador sin producción de agua' })}
+      ${nf('Horas de producción al día', 'hProd', { suf: 'horas', hint: 'Vacío = horas del proyecto (8 por defecto)' })}
       ${nf('Potencia promedio', 'w', { suf: 'W' })}
       ${nf('Horas de uso al día', 'h', { suf: 'h' })}
       ${nf('Insumos y servicio', 'insF', { suf: n.mon + '/año', hint: 'Referencia si no registras insumos' })}
     </div>
     <div class="bar" style="margin-top:12px"><button class="btn primary" data-act="saveEq">Guardar equipo</button><span class="muted">Se guarda en tu lista y queda disponible en todos los proyectos.${UI.nuevo.mon === 'MXN' ? ` Los montos en MXN se convierten a USD con el tipo de cambio del proyecto (${nf2.format(P.tc)}).` : ''}</span></div></div>
-  <div class="panel"><label class="fld" style="margin-bottom:12px"><span>Buscar equipo</span><input type="search" id="catQ" placeholder="Parte o descripción"></label>
+  <div class="panel"><div class="bar" style="margin-bottom:12px;align-items:flex-end"><label class="fld" style="flex:1 1 240px"><span>Buscar equipo</span><input type="search" id="catQ" placeholder="Parte o descripción"></label>
+    <div class="seg"><button data-act="listF" data-v="proy" aria-pressed="${lf === 'proy'}">En el proyecto (${usedIdsL.size})</button><button data-act="listF" data-v="acc" aria-pressed="${lf === 'acc'}">Accesorios (${nAcc})</button><button data-act="listF" data-v="all" aria-pressed="${lf === 'all'}">Todos (${S.catalog.length})</button></div></div>
   <div class="tw"><table class="t"><thead><tr>
-    <th>No. parte</th><th>Descripción</th><th>Tipo</th><th class="n">Venta USD</th><th class="n">Renta MXN/mes</th><th class="n">Costo compra USD</th><th class="n">Capacidad L/día</th><th class="n">Insumos USD/año</th><th class="n">Insumos USD/1000 L</th><th></th></tr></thead><tbody>
-  ${S.catalog.map(c => `<tr data-q="${esc((c.parte + ' ' + c.nombre).toLowerCase())}">
+    <th>No. parte</th><th>Descripción</th><th>Tipo</th><th class="n">Renta MXN/mes</th><th class="n">Costo compra USD</th><th class="n">Capacidad L/hora</th><th class="n">Horas prod./día</th><th class="n">Insumos USD/año</th><th></th></tr></thead><tbody>
+  ${rowsCat.map(c => `<tr data-q="${esc((c.parte + ' ' + c.nombre).toLowerCase())}">
     <td><input type="text" data-b="c:${c.id}:parte" value="${esc(c.parte || '')}" style="min-width:110px"></td>
     <td><input type="text" data-b="c:${c.id}:nombre" value="${esc(c.nombre)}" style="min-width:300px"></td>
-    <td><input type="text" data-b="c:${c.id}:tipo" value="${esc(c.tipo)}" style="min-width:170px"></td>
-    ${['precio', 'r1', 'costo', 'cap', 'insF', 'insV'].map(k => `<td><input type="number" inputmode="decimal" step="any" min="0" data-b="c:${c.id}:${k}" value="${esc(c[k] || 0)}"${k === 'costo' && !(c.costo > 0) ? ' style="border-color:var(--warn)"' : ''}></td>`).join('')}
-    <td><button class="btn danger sm" data-act="delEq" data-id="${c.id}">Quitar</button></td></tr>`).join('')}
+    <td><select data-b="c:${c.id}:tipo" style="min-width:170px">${(tipos.indexOf(c.tipo) < 0 ? tipos.concat([c.tipo]) : tipos).map(t => `<option value="${esc(t)}"${t === c.tipo ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></td>
+    ${['r1', 'costo', 'lph', 'hProd', 'insF'].map(k => `<td><input type="number" inputmode="decimal" step="any" min="0" data-b="c:${c.id}:${k}" value="${esc(c[k] || (k === 'hProd' ? '' : 0))}"${k === 'hProd' ? ' placeholder="proy."' : ''}${k === 'costo' && !(c.costo > 0) ? ' style="border-color:var(--warn)"' : ''}></td>`).join('')}
+    <td><button class="btn danger sm" data-act="delEq" data-id="${c.id}">Quitar</button></td></tr>`).join('') || `<tr><td colspan="9" class="muted">${lf === 'acc' ? 'Aún no hay accesorios. Agrega uno con el tipo "Accesorios".' : 'Aún no hay equipos en el proyecto. Agrégalos en "Áreas y equipos" o cambia el filtro a "Todos".'}</td></tr>`}
   </tbody></table></div>
-  <p class="muted" style="margin:10px 0 0">Costo en 0 = estimado según el porcentaje del proyecto. Insumos USD/año parte de la póliza anual de la lista: ajústalo a tu costo real de filtros y servicio. Capacidad = L/hora × 12 horas.</p></div>
+  <p class="muted" style="margin:10px 0 0">Los artículos con tipo "Accesorios" se rentan o venden junto con los equipos: no cuentan como número de equipo, no llevan insumos ni visitas, pero su precio, renta y costo de compra sí entran en la cotización y en la rentabilidad.</p>
+  <p class="muted" style="margin:6px 0 0">Costo en $0 = falta capturarlo: la app te avisa al usar el equipo en un proyecto y no calcula la rentabilidad como confiable hasta que lo captures. Insumos USD/año parte de la póliza anual de la lista: ajústalo a tu costo real de filtros y servicio. Capacidad diaria = L/hora × horas de producción (8 por defecto, editable en el proyecto o por modelo). Los despachadores sin producción de agua llevan 0 L/hora.</p></div>
   <div class="panel"><h2>Importar desde Excel o CSV</h2>
-    <p class="muted" style="margin:0 0 8px">Pega filas con estas columnas, en orden: descripción, tipo, precio venta, costo, potencia W, horas/día, capacidad L/día, insumos USD/año, insumos por 1000 L. Se agregan a la lista actual.</p>
+    <p class="muted" style="margin:0 0 8px">Pega filas con estas columnas, en orden: descripción, tipo, precio venta, costo, potencia W, horas/día, capacidad L/hora, insumos USD/año. Se agregan a la lista actual.</p>
     <textarea id="impTxt" placeholder="Purificador X&#9;Cocina&#9;4500&#9;2700&#9;200&#9;12&#9;900&#9;380&#9;1.2"></textarea>
     <div class="bar" style="margin-top:8px"><button class="btn primary" data-act="importCat">Importar filas</button></div></div>
   <div class="panel"><h2>Respaldo y copias</h2><div class="bar">
@@ -771,52 +846,61 @@ function tabLista() {
     <p class="muted" style="margin:10px 0 0">Combinar agrega los proyectos y equipos que falten y conserva la versión más reciente de cada proyecto. Úsalo para pasar a la nube lo que capturaste sin conexión en otra copia de la app.</p></div>`;
 }
 
+const bibPending = () => Object.keys(UI.bibDraft).filter(id => Object.keys(UI.bibDraft[id]).length).length;
 function tabBib() {
-  const ok = S.catalog.filter(c => c.w > 0).length;
-  const list = S.catalog.filter(c => !UI.soloPend || !(c.w > 0));
+  const ok = S.catalog.filter(c => !esAcc(c) && c.w > 0).length, f = UI.bibF;
+  const usedIds = new Set(R.lines.map(l => l.e.id));
+  const list = S.catalog.filter(c => !esAcc(c) && (f === 'all' || (f === 'proy' ? usedIds.has(c.id) : !(c.w > 0))));
+  const dv = (c, k) => { const d = UI.bibDraft[c.id]; return d && Object.prototype.hasOwnProperty.call(d, k) ? d[k] : c[k]; };
+  const empty = f === 'proy' ? 'Aún no hay equipos en el proyecto. Agrégalos en "Áreas y equipos" o cambia el filtro a "Todos".' : 'No hay equipos pendientes.';
   return `<div class="banner info"><div><strong>Biblioteca de consumo eléctrico</strong><p>Registra una vez la potencia promedio y las horas de uso de cada equipo. Quedan guardadas como referencia para todos los proyectos nuevos y los existentes. <span class="mono">${ok}</span> de <span class="mono">${S.catalog.length}</span> equipos registrados.</p></div></div>
   <div class="panel"><div class="bar" style="margin-bottom:12px;align-items:flex-end">
     <label class="fld" style="flex:1 1 240px"><span>Buscar equipo</span><input type="search" id="catQ" placeholder="Parte o descripción"></label>
-    <div class="seg"><button data-act="pend" data-v="0" aria-pressed="${!UI.soloPend}">Todos</button><button data-act="pend" data-v="1" aria-pressed="${UI.soloPend}">Pendientes</button></div></div>
+    <div class="seg"><button data-act="pend" data-v="proy" aria-pressed="${f === 'proy'}">En el proyecto (${usedIds.size})</button><button data-act="pend" data-v="all" aria-pressed="${f === 'all'}">Todos</button><button data-act="pend" data-v="pend" aria-pressed="${f === 'pend'}">Pendientes</button></div>
+    <span id="bibPend"></span><button class="btn primary" data-act="saveBib">Guardar cambios</button></div>
   <div class="tw"><table class="t"><thead><tr><th>No. parte</th><th>Descripción</th><th class="n">Potencia promedio W</th><th class="n">Horas/día</th><th class="n">kWh/día</th><th class="n">Costo/mes MXN</th><th>Nota o fuente</th><th>Estado</th></tr></thead><tbody>
   ${list.map(c => `<tr data-q="${esc((c.parte + ' ' + c.nombre).toLowerCase())}">
     <td style="white-space:nowrap">${esc(c.parte)}</td><td style="min-width:260px">${esc(c.nombre)}</td>
-    <td><input type="number" inputmode="decimal" step="any" min="0" data-b="c:${c.id}:w" value="${esc(c.w || 0)}"></td>
-    <td><input type="number" inputmode="decimal" step="any" min="0" max="24" data-b="c:${c.id}:h" value="${esc(c.h || 0)}"></td>
+    <td><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="b:${c.id}:w" value="${esc(dv(c, 'w') || '')}" placeholder="0"></td>
+    <td><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="b:${c.id}:h" value="${esc(dv(c, 'h') || '')}" placeholder="0"></td>
     <td class="n" id="bk-${c.id}"></td><td class="n" id="bm-${c.id}"></td>
-    <td><input type="text" data-b="c:${c.id}:nota" value="${esc(c.nota || '')}" placeholder="Medición, ficha técnica…" style="min-width:200px"></td>
-    <td id="bs-${c.id}"></td></tr>`).join('') || '<tr><td colspan="8" class="muted">No hay equipos pendientes.</td></tr>'}
+    <td><input type="text" data-b="b:${c.id}:nota" value="${esc(dv(c, 'nota') || '')}" placeholder="Medición, ficha técnica…" style="min-width:200px"></td>
+    <td id="bs-${c.id}"></td></tr>`).join('') || `<tr><td colspan="8" class="muted">${empty}</td></tr>`}
   </tbody></table></div>
+  <div class="bar" style="margin-top:12px"><button class="btn primary" data-act="saveBib">Guardar cambios</button><span class="muted">Los cambios se aplican a todos los proyectos cuando pulsas Guardar.</span></div>
   <p class="muted" style="margin:10px 0 0">Usa la potencia promedio real en operación, incluyendo los ciclos de compresor y calentamiento. El costo mensual usa la tarifa del proyecto activo y 30 días.</p></div>`;
 }
 
 function paintBib() {
   S.catalog.forEach(c => {
-    const kwh = c.w / 1000 * c.h;
-    setT('bk-' + c.id, c.w > 0 ? nf2.format(kwh) : '—');
-    setT('bm-' + c.id, c.w > 0 ? mxn(kwh * 30 * P.tarifa) : '—');
-    setO('bs-' + c.id, c.w > 0 ? '<span class="chip good">Registrado</span>' : '<span class="chip warn">Pendiente</span>');
+    const d = Object.assign({}, c, UI.bibDraft[c.id] || {}), w = num(d.w), h = num(d.h), kwh = w / 1000 * h;
+    setT('bk-' + c.id, w > 0 ? nf2.format(kwh) : '—');
+    setT('bm-' + c.id, w > 0 ? mxn(kwh * 30 * P.tarifa) : '—');
+    setO('bs-' + c.id, w > 0 ? '<span class="chip good">Registrado</span>' : '<span class="chip warn">Pendiente</span>');
   });
+  const n = bibPending();
+  setO('bibPend', n ? `<span class="chip warn">${n} ${n === 1 ? 'equipo con cambios' : 'equipos con cambios'} sin guardar</span>` : '');
 }
 
 function tabRent() {
   const rn = P.modo === 'renta';
-  return `<div id="verdict"></div>${discPanel()}${cfgPanel()}
+  return `${faltanBanner()}<div id="verdict"></div><div class="bar" style="margin-bottom:12px"><button class="btn primary" data-act="dlAnalisis" data-needdl>Descargar análisis de rentabilidad (HTML)</button><span class="muted">Para ti como proveedor: incluye costos, insumos por equipo y desglose por áreas.</span></div>${promPanel()}${discPanel()}${cfgPanel()}
   <div class="strip" id="rentKpi"></div>
   <div class="cols2" style="margin-bottom:16px">
     <div class="panel"><h2>Gasto actual contra ${rn ? 'renta y electricidad' : 'insumos y electricidad'}</h2><div id="ch1"></div>
       <div class="legend"><span><i style="background:var(--c2)"></i>Gasto actual</span><span><i style="background:var(--c1)"></i>${rn ? 'Renta y electricidad' : 'Insumos y electricidad'}</span></div></div>
     <div class="panel"><h2>${rn ? 'Tu posición acumulada' : 'Posición acumulada del cliente'}</h2><div id="ch2"></div><p class="muted" style="margin:6px 0 0">${rn ? 'Parte de tu inversión en equipos en el año 0. Cruza cero al recuperarla.' : 'Parte de la inversión en el año 0. Cruza cero al recuperarla.'}</p></div>
   </div>
-  <div class="panel"><h2>Proyección anual (USD)</h2><div class="tw" id="flowTbl"></div></div>
+  <div class="panel"><h2>Proyección anual (MXN)</h2><div class="tw" id="flowTbl"></div></div>
   <div class="panel"><h2>${rn ? 'Tu inversión y rendimiento' : 'Costo y margen para ti'}</h2><div id="sellOut"></div></div>
   <div class="panel"><h2>Rentabilidad por equipo</h2>
-    <p class="muted" style="margin:0 0 10px">Ajusta vida útil y visitas por modelo (vacío = valor base del proyecto). ${rn ? 'Cada modelo se evalúa con su parte de la renta, su costo, sus insumos y visitas, y su valor residual.' : 'Cada modelo se evalúa con su parte del precio, su costo y sus insumos y visitas del primer año.'} La instalación no se reparte entre equipos.</p>
-    <div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th>Vida útil (años)</th><th>Visitas al año por equipo</th><th>Costo por visita (MXN)</th></tr></thead><tbody>
+    <p class="muted" style="margin:0 0 10px">Ajusta el descuento manual, la vida útil y las visitas por modelo (vacío = valor base del proyecto). El descuento manual es el mismo de la cotización. ${rn ? 'Cada modelo se evalúa con su parte de la renta, su costo, sus insumos y visitas, y su valor residual.' : 'Cada modelo se evalúa con su parte del precio, su costo y sus insumos y visitas del primer año.'} La instalación no se reparte entre equipos.</p>
+    <div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th>Descuento manual (%)</th><th>Vida útil (años)</th><th>Visitas al año por equipo</th><th>Costo por visita (MXN)</th></tr></thead><tbody>
     ${R.lines.map(l => `<tr><td>${esc(eqName(l.e))}</td><td class="n">${l.qty}</td>
+      <td><input type="text" inputmode="decimal" data-num="1" autocomplete="off" data-b="d:${l.e.id}" value="${esc(P.descLineas[l.e.id] || '')}" placeholder="0" style="width:100px"></td>
       <td><input type="number" inputmode="decimal" step="any" min="0" data-b="v:${l.e.id}:vida" value="${esc((P.cfg[l.e.id] || {}).vida != null ? P.cfg[l.e.id].vida : '')}" placeholder="${esc(P.vida)}" style="width:100px"></td>
       <td><input type="number" inputmode="decimal" step="any" min="0" data-b="v:${l.e.id}:visN" value="${esc((P.cfg[l.e.id] || {}).visN != null ? P.cfg[l.e.id].visN : '')}" placeholder="${esc(P.visN)}" style="width:100px"></td>
-      <td><input type="number" inputmode="decimal" step="any" min="0" data-b="v:${l.e.id}:visC" value="${esc((P.cfg[l.e.id] || {}).visC != null ? P.cfg[l.e.id].visC : '')}" placeholder="${esc(P.visC)}" style="width:120px"></td></tr>`).join('') || '<tr><td colspan="5" class="muted">Agrega equipos en la pestaña de áreas.</td></tr>'}
+      <td><input type="number" inputmode="decimal" step="any" min="0" data-b="v:${l.e.id}:visC" value="${esc((P.cfg[l.e.id] || {}).visC != null ? P.cfg[l.e.id].visC : '')}" placeholder="${esc(P.visC)}" style="width:120px"></td></tr>`).join('') || '<tr><td colspan="6" class="muted">Agrega equipos en la pestaña de áreas.</td></tr>'}
     </tbody></table></div>
     <div id="eqRent" style="margin-top:14px"></div></div>`;
 }
@@ -850,6 +934,8 @@ function tabCot() {
   <div class="panel"><h2>Resumen</h2><div id="quoteTot"></div></div>
   <div class="panel"><h2>Entregar</h2><div class="bar">
     <button class="btn primary" data-act="dlQuote" data-needdl>Descargar cotización (HTML)</button>
+    <button class="btn" data-act="dlAnalisis" data-needdl>Descargar análisis de rentabilidad (interno)</button>
+    <button class="btn" data-act="dlCliente" data-needdl>Descargar reporte de consumo e impacto (cliente)</button>
     <button class="btn" data-act="copyRes">Copiar resumen</button></div>
     <p class="muted" style="margin:8px 0 0">El archivo HTML se abre en cualquier navegador y se puede imprimir o guardar como PDF desde ahí.</p></div>`;
 }
@@ -858,14 +944,15 @@ function tabRep() {
   const per = UI.per;
   return `<div class="bar" style="margin-bottom:12px"><span class="muted">Periodo:</span><div class="seg">
     ${[['dia', 'Diario'], ['mes', 'Mensual'], ['anio', 'Anual']].map(x => `<button data-act="per" data-v="${x[0]}" aria-pressed="${per === x[0]}">${x[1]}</button>`).join('')}</div>
-    <span style="flex:1"></span><button class="btn sm" data-act="csvAgua" data-needdl>CSV agua</button><button class="btn sm" data-act="csvElec" data-needdl>CSV electricidad</button></div>
+    <span style="flex:1"></span><button class="btn primary sm" data-act="dlCliente" data-needdl>Descargar reporte para el cliente (según periodo)</button><button class="btn sm" data-act="csvAgua" data-needdl>CSV agua</button><button class="btn sm" data-act="csvElec" data-needdl>CSV electricidad</button></div>
+  ${ecoPanel()}
   <div id="repOut"></div>`;
 }
 
 /* ---------- pintado de resultados ---------- */
 function setO(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html; }
 function setT(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
-function perMult(ar) { return UI.per === 'dia' ? 1 : UI.per === 'mes' ? ar.dias / 12 : ar.dias; }
+function perMult(ar, per) { per = per || UI.per; return per === 'dia' ? 1 : per === 'mes' ? ar.dias / 12 : ar.dias; }
 const perLab = () => UI.per === 'dia' ? 'por día' : UI.per === 'mes' ? 'por mes' : 'por año';
 
 function paint() {
@@ -879,16 +966,17 @@ function paint() {
   if (UI.tab === 'rep') paintRep();
   paintDisc();
 }
-function kpi(label, val, cls) { return `<div class="kpi ${cls || ''}"><span>${esc(label)}</span><b>${val}</b></div>`; }
+function kpi(label, val, cls) { return `<div class="kpi ${cls || ''}"><span>${esc(label)}</span><b>${String(val).replace(' · ', '<br>').replace(/(\d) %/g, '$1\u00a0%')}</b></div>`; }
 const tirTxtOf = t => t == null ? '—' : t === Infinity ? '>1,000 %' : pct(t * 100);
 function verdictInfo() {
   const o = R;
   if (!o.hasEq) return { cls: 'info', t: 'Aún no hay equipos en el proyecto', d: 'Agrega equipos a las áreas para calcular costos y rentabilidad.' };
+  if (o.faltan) { const n = o.missEq.length + o.missIns.length + o.missKit.length; return { cls: 'warn', t: 'Faltan costos de compra', d: `${n} concepto(s) en $0: ${o.missEq.concat(o.missKit).map(e => e.parte || e.nombre).concat(o.missIns.map(x => x.parte)).join(', ')}. Captúralos para que el margen y la rentabilidad sean confiables.` }; }
   const sinPrecio = o.lines.filter(l => !(l.unit > 0)).length;
   if (sinPrecio) return { cls: 'warn', t: o.renta ? 'Faltan rentas en la lista' : 'Faltan precios de venta', d: `${sinPrecio} equipo(s) del proyecto no tienen ${o.renta ? 'renta (Lista 1)' : 'precio de venta'} en la lista de precios. Captúralos para calcular la rentabilidad.` };
   if (o.renta) {
     const rango = o.rentaMaxMes >= o.rentaMinMes ? `Rango de negociación: ${mx(o.rentaMinMes)} a ${mx(o.rentaMaxMes)} al mes.` : 'No hay rango viable: aun en tu renta mínima el cliente no ahorra.';
-    if (o.sellerOk && o.clientOk) return { cls: 'good', t: 'Proyecto rentable', d: `Tu TIR es ${tirTxtOf(o.sTir)} y recuperas la inversión en ${o.sPayback == null ? '—' : nf1.format(o.sPayback) + ' años'}. El cliente ahorra ${usd(o.ahorro1)} el primer año. ${rango}` };
+    if (o.sellerOk && o.clientOk) return { cls: 'good', t: 'Proyecto rentable', d: `Tu TIR es ${tirTxtOf(o.sTir)} y recuperas la inversión en ${o.sPayback == null ? '—' : nf1.format(o.sPayback) + ' años'}. El cliente ahorra ${mx(o.ahorro1 * P.tc)} el primer año. ${rango}` };
     if (!o.sellerOk && o.clientOk) return { cls: 'bad', t: 'Renta por debajo de tu mínimo', d: `Tu TIR queda en ${tirTxtOf(o.sTir)} y tu mínimo es ${pct(P.tirObj, 0)}. No bajes de ${mx(o.rentaMinMes)} al mes antes de IVA. ${rango}` };
     if (o.sellerOk && !o.clientOk) return { cls: 'warn', t: 'La renta no le genera ahorro al cliente', d: `Renta y electricidad superan su gasto actual. Para que ahorre, la renta no debe pasar de ${mx(o.rentaMaxMes)} al mes. ${rango}` };
     return { cls: 'bad', t: 'Proyecto no rentable con estos datos', d: `La renta no cubre tu inversión y el cliente no ahorra. Revisa consumos, equipos o rentas. ${rango}` };
@@ -896,7 +984,7 @@ function verdictInfo() {
   const rango = o.pMaxTir >= o.pMin ? `Rango de negociación: ${usd(o.pMin)} a ${usd(o.pMaxTir)}.` : 'No hay rango viable: aun al precio mínimo el cliente no alcanza la TIR objetivo.';
   if (o.sellerOk && o.clientOk) return { cls: 'good', t: 'Proyecto rentable', d: `Tu margen es ${pct(o.margenPct)} y el cliente recupera la inversión en ${o.payback == null ? '—' : nf1.format(o.payback) + ' años'}. ${rango}` };
   if (!o.sellerOk && o.clientOk) return { cls: 'bad', t: 'Precio por debajo de tu mínimo', d: `Tu margen queda en ${pct(o.margenPct)} y el mínimo es ${pct(P.margenMin, 0)}. No bajes de ${usd(o.pMin)} antes de IVA. ${rango}` };
-  if (o.sellerOk && !o.clientOk) return { cls: 'warn', t: 'El cliente no ve retorno suficiente', d: `Con VAN de ${usd(o.van)} y TIR de ${o.tir == null ? 'no calculable' : o.tir === Infinity ? 'muy alta' : pct(o.tir * 100)}. Para cumplir su TIR objetivo el precio debería ser ${usd(Math.max(0, o.pMaxTir))} o menos. ${rango}` };
+  if (o.sellerOk && !o.clientOk) return { cls: 'warn', t: 'El cliente no ve retorno suficiente', d: `Con VAN de ${mx(o.van * P.tc)} y TIR de ${o.tir == null ? 'no calculable' : o.tir === Infinity ? 'muy alta' : pct(o.tir * 100)}. Para cumplir su TIR objetivo el precio debería ser ${usd(Math.max(0, o.pMaxTir))} o menos. ${rango}` };
   return { cls: 'bad', t: 'Proyecto no rentable con estos datos', d: `El precio no cumple tu margen mínimo y el cliente no alcanza su retorno. Revisa consumos, equipos o precios. ${rango}` };
 }
 
@@ -906,27 +994,27 @@ function paintStrip() {
   if (o.renta) {
     $('#strip').innerHTML =
       kpi('Renta mensual (sin IVA)', mx(o.rentaMes)) + kpi('Renta mínima', mx(o.rentaMinMes)) +
-      kpi('Ahorro cliente año 1', usd(o.ahorro1), o.ahorro1 > 0 ? 'good' : o.hasEq ? 'bad' : '') +
+      kpi('Ahorro cliente año 1', mx(o.ahorro1 * P.tc), o.ahorro1 > 0 ? 'good' : o.hasEq ? 'bad' : '') +
       kpi('Tu inversión', usd(o.I0)) +
       kpi('Tu recuperación', o.sPayback == null ? (o.hasEq ? '> ' + P.horizonte + ' años' : '—') : nf1.format(o.sPayback) + ' años') +
-      kpi('Tu VAN', usd(o.sVan), o.hasEq ? (o.sVan > 0 ? 'good' : 'bad') : '') + kpi('Tu TIR', tirTxtOf(o.sTir), o.hasEq ? (o.sellerOk ? 'good' : 'bad') : '') + chip;
+      kpi('Tu VAN', mx(o.sVan * P.tc), o.hasEq ? (o.sVan > 0 ? 'good' : 'bad') : '') + kpi('Tu TIR', tirTxtOf(o.sTir), o.hasEq ? (o.sellerOk ? 'good' : 'bad') : '') + chip;
     return;
   }
   $('#strip').innerHTML =
     kpi('Precio (sin IVA)', usd(o.precio)) + kpi('Precio mínimo', usd(o.pMin)) +
     kpi('Tu margen', pct(o.margenPct), o.hasEq ? (o.sellerOk ? 'good' : 'bad') : '') +
-    kpi('Ahorro año 1', usd(o.ahorro1), o.ahorro1 > 0 ? 'good' : o.hasEq ? 'bad' : '') +
+    kpi('Ahorro año 1', mx(o.ahorro1 * P.tc), o.ahorro1 > 0 ? 'good' : o.hasEq ? 'bad' : '') +
     kpi('Recuperación', o.payback == null ? (o.hasEq ? '> ' + P.horizonte + ' años' : '—') : nf1.format(o.payback) + ' años') +
-    kpi('VAN cliente', usd(o.van), o.hasEq ? (o.van > 0 ? 'good' : 'bad') : '') + kpi('TIR cliente', tirTxtOf(o.tir)) + chip;
+    kpi('VAN cliente', mx(o.van * P.tc), o.hasEq ? (o.van > 0 ? 'good' : 'bad') : '') + kpi('TIR cliente', tirTxtOf(o.tir)) + chip;
 }
 
 function paintAreas() {
   R.areas.forEach(ar => {
-    const warn = !ar.hasEq ? `<span class="chip warn">Sin equipo</span>` : ar.uso > 1 ? `<span class="chip bad">Capacidad insuficiente</span>` : ar.uso > 0.85 ? `<span class="chip warn">Capacidad justa</span>` : `<span class="chip good">Capacidad suficiente</span>`;
+    const warn = !ar.hasEq ? `<span class="chip warn">Sin equipo</span>` : !(ar.cap > 0) ? `<span class="chip">Despachadores sin producción propia</span>` : ar.uso > 1 ? `<span class="chip bad">Capacidad insuficiente</span>` : ar.uso > 0.85 ? `<span class="chip warn">Capacidad justa</span>` : `<span class="chip good">Capacidad suficiente</span>`;
     setO('ao-' + ar.a.id, `
     <div><b>${nf0.format(ar.Ld)} L</b><span>Litros por día</span></div>
-    <div><b>${ar.cap ? nf0.format(ar.cap) + ' L' : '—'}</b><span>Capacidad diaria${ar.uso != null ? ' · uso ' + nf0.format(ar.uso * 100) + ' %' : ''}</span></div>
-    <div><b>${usd(ar.gasto)}</b><span>Gasto actual al año</span></div>
+    <div><b>${ar.cap ? nf0.format(ar.cap) + ' L' : '—'}</b><span>${ar.cap ? 'Capacidad diaria (' + nf1.format(R.hrsDef) + ' h)' : 'Sin producción de agua propia'}${ar.uso != null ? ' · uso ' + nf0.format(ar.uso * 100) + ' %' : ''}</span></div>
+    <div><b>${mx(ar.gastoMXN)}</b><span>Gasto actual al año</span></div>
     <div><b>${usd(ar.ins)}</b><span>Insumos año 1</span></div>
     <div><b>${nf0.format(ar.kwh)} kWh</b><span>Consumo eléctrico anual</span></div>
     <div style="align-self:center">${warn}</div>`);
@@ -963,41 +1051,73 @@ function paintDisc() {
   setO('discOut', `<div class="bar"><span style="font-size:14px">Descuento total aplicado: <b class="mono">${pct(o.descTotalPct)}</b> sobre lista. Máximo sin bajar de tu mínimo: <b class="mono">${pct(o.maxDescPct)}</b>.</span>${chip}</div>`);
 }
 
+function promPanel() {
+  return `<div class="panel"><h2>Rentabilidad sobre promedio mensual</h2>
+  <p class="muted" style="margin:0 0 12px">Captura el gasto y el consumo promedio mensual global que te dio el cliente para calcular los márgenes de ahorro mensuales, sin depender del detalle por área.</p>
+  <div class="grid">${fld('Gasto promedio mensual en agua embotellada', 'p:promGasto', { suf: 'MXN/mes' })}${fld('Consumo promedio mensual', 'p:promLitros', { suf: 'litros/mes', hint: 'Global, de todas las áreas' })}</div>
+  <div class="bar" style="margin-top:8px">${chk('Usar este gasto promedio en todo el análisis (ahorro, ROI, VAN y TIR)', 'p:promOn')}</div>
+  <div id="promOut" style="margin-top:12px"></div></div>`;
+}
+function paintProm() {
+  if (!document.getElementById('promOut')) return;
+  const o = R, m = o.prom;
+  if (!o.hasEq || !m || !(m.gM > 0)) { setO('promOut', '<p class="muted">Captura el gasto promedio mensual y agrega equipos a las áreas para ver los márgenes de ahorro.</p>'); return; }
+  const row = (a, b, c) => `<tr class="${c || ''}"><td>${a}</td><td class="n">${b}</td></tr>`, rn = o.renta;
+  const bien = m.ahorroNeto > 0;
+  setO('promOut', `<div class="tw"><table class="t"><tbody>
+    ${row('Gasto promedio mensual actual' + (m.usaProm ? '' : ' (calculado con los consumos por área)'), mx(m.gM))}
+    ${m.lM > 0 ? row('Consumo promedio mensual' + (P.promLitros > 0 ? '' : ' (calculado con las áreas)'), nf0.format(m.lM) + ' L') : ''}
+    ${rn ? row('Renta mensual de los equipos (sin IVA)', mx(m.pagoM)) : row('Insumos y visitas, promedio mensual', mx(m.insM))}
+    ${row('Electricidad, promedio mensual', mx(m.elecM))}
+    ${row('Costo mensual de operación con equipos', mx(m.operM), 'sub')}
+    ${row('Ahorro mensual de operación', mx(m.ahorroOper) + ' · ' + pct(m.margenOper), '')}
+    ${row(rn ? 'Instalación repartida en ' + o.N + ' años' : 'Inversión repartida en ' + o.N + ' años', mx(m.amortM))}
+    ${row('Costo mensual total con equipos', mx(m.costoM), 'sub')}
+    ${row('Ahorro mensual neto', mx(m.ahorroNeto), 'tot')}
+    ${row('Margen de ahorro', `<span style="color:${bien ? 'var(--good)' : 'var(--bad)'}">${pct(m.margenNeto)}</span>`)}
+    ${row('Ahorro anual neto', mx(m.ahorroNeto * 12))}
+    ${m.cplAct != null ? row('Costo por litro: actual → con equipos', `$ ${nf2.format(m.cplAct)} → $ ${nf2.format(m.cplNuevo)}`) : ''}</tbody></table></div>
+    <p class="muted" style="margin:8px 0 0">${bien ? 'Con estos promedios el cliente ahorra cada mes aun repartiendo la inversión.' : 'Con estos promedios el cliente no ahorra una vez repartida la inversión.'}</p>`);
+}
+
 function paintEqRent() {
   if (!document.getElementById('eqRent')) return;
   const o = R;
   if (!o.hasEq) { setO('eqRent', '<p class="muted">Cuando asignes equipos a las áreas verás aquí la rentabilidad de cada modelo.</p>'); return; }
-  const chip = x => x.ok ? '<span class="chip good">Rentable</span>' : '<span class="chip bad">Bajo tu mínimo</span>';
+  const chip = x => x.ok ? '<span class="chip good">Rentable</span>' : (x.l.e.costo > 0 ? '<span class="chip bad">No rentable</span>' : '<span class="chip warn">Falta costo</span>');
+  const notes = o.plines.map(x => `<div class="banner ${x.ok ? 'good' : (x.l.e.costo > 0 ? 'bad' : 'warn')}" style="margin:8px 0 0;padding:10px 14px"><div><strong style="font-size:14px">${esc(eqName(x.l.e))}</strong><p style="margin:2px 0 0">${esc(x.nota)}</p></div></div>`).join('');
   if (o.renta) {
-    const rows = o.plines.map(x => `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${usd(x.inc1)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.l.ins)}</td><td class="n">${usd(x.l.depAnual)}</td><td class="n">${usd(x.utilDep)}</td><td class="n">${pct(x.roi, 0)}</td><td class="n">${usd(x.van)}</td><td class="n">${tirTxtOf(x.tir)}</td><td class="n">${x.payback == null ? '> ' + o.N + ' años' : nf1.format(x.payback) + ' años'}</td><td>${chip(x)}</td></tr>`).join('');
-    setO('eqRent', `<div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th class="n">Renta anual</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas/año</th><th class="n">Deprec. anual</th><th class="n">Utilidad anual tras deprec.</th><th class="n">ROI</th><th class="n">VAN</th><th class="n">TIR</th><th class="n">Recuperación</th><th>Resultado</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+    const rows = o.plines.map(x => `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${usd(x.inc1)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.l.ins)}</td><td class="n">${usd(x.l.depAnual)}</td><td class="n">${usd(x.utilDep)}</td><td class="n">${pct(x.roi, 0)}</td><td class="n">${mx(x.van * P.tc)}</td><td class="n">${tirTxtOf(x.tir)}</td><td class="n">${x.payback == null ? '> ' + o.N + ' años' : nf1.format(x.payback) + ' años'}</td><td class="n">${mx(x.rentaMinMes)}</td><td>${chip(x)}</td></tr>`).join('');
+    setO('eqRent', `<div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th class="n">Renta anual</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas/año</th><th class="n">Deprec. anual</th><th class="n">Utilidad anual tras deprec.</th><th class="n">ROI</th><th class="n">VAN</th><th class="n">TIR</th><th class="n">Recuperación</th><th class="n">Renta mínima/mes</th><th>Resultado</th></tr></thead><tbody>${rows}</tbody></table></div>${notes}`);
     return;
   }
-  const rows = o.plines.map(x => `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${usd(x.ingreso)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.insY1)}</td><td class="n" style="color:${x.ok ? 'var(--good)' : 'var(--bad)'}">${usd(x.margen)}</td><td class="n">${pct(x.margenPct)}</td><td class="n">${usd(x.pMin)}</td><td class="n">${usd(x.l.depAnual)}</td><td class="n">${usd(x.l.vlibros)}</td><td>${chip(x)}</td></tr>`).join('');
-  setO('eqRent', `<div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th class="n">Ingreso</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas${P.y1 ? ' año 1' : ''}</th><th class="n">Margen</th><th class="n">Margen %</th><th class="n">Precio mínimo</th><th class="n">Deprec. anual (cliente)</th><th class="n">Valor en libros año ${o.N}</th><th>Resultado</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+  const rows = o.plines.map(x => `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${usd(x.ingreso)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.insY1)}</td><td class="n" style="color:${x.okM ? 'var(--good)' : 'var(--bad)'}">${usd(x.margen)}</td><td class="n">${pct(x.margenPct)}</td><td class="n">${usd(x.pMin)}</td><td class="n">${tirTxtOf(x.tirC)}</td><td class="n">${usd(x.l.depAnual)}</td><td class="n">${usd(x.l.vlibros)}</td><td>${chip(x)}</td></tr>`).join('');
+  setO('eqRent', `<div class="tw"><table class="t"><thead><tr><th>Equipo</th><th class="n">Cant.</th><th class="n">Ingreso</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas${P.y1 ? ' año 1' : ''}</th><th class="n">Margen</th><th class="n">Margen %</th><th class="n">Precio mínimo</th><th class="n">TIR cliente</th><th class="n">Deprec. anual (cliente)</th><th class="n">Valor en libros año ${o.N}</th><th>Resultado</th></tr></thead><tbody>${rows}</tbody></table></div>${notes}`);
 }
 
 function paintRent() {
   const o = R, v = verdictInfo();
+  paintProm();
+  const MX = n => { const x = n * P.tc; return (x < 0 ? '-' : '') + '$ ' + nf0.format(Math.abs(Math.round(x))); };
   paintEqRent();
   setO('verdict', `<div class="banner ${v.cls}"><div><strong>${esc(v.t)}</strong><p>${esc(v.d)}</p></div></div>`);
   const cats = o.flows.map(f => 'Año ' + f.t);
-  const clientRow = f => `<tr><td>${f.t}</td><td class="n">${usd(f.gasto)}</td><td class="n">${o.renta ? usd(f.pago) : (f.ins ? usd(f.ins) : 'Incluidos')}</td><td class="n">${usd(f.elec)}</td><td class="n">${usd(f.F)}</td><td class="n" style="color:${f.cum >= 0 ? 'var(--good)' : 'var(--bad)'}">${usd(f.cum)}</td></tr>`;
+  const clientRow = f => `<tr><td>${f.t}</td><td class="n">${MX(f.gasto)}</td><td class="n">${o.renta ? MX(f.pago) : (f.ins ? MX(f.ins) : 'Incluidos')}</td><td class="n">${MX(f.elec)}</td><td class="n">${MX(f.F)}</td><td class="n" style="color:${f.cum >= 0 ? 'var(--good)' : 'var(--bad)'}">${MX(f.cum)}</td></tr>`;
   const clientTbl = `<table class="t"><thead><tr><th>Año</th><th class="n">Gasto actual</th><th class="n">${o.renta ? 'Renta' : 'Insumos'}</th><th class="n">Electricidad</th><th class="n">Ahorro neto</th><th class="n">Acumulado</th></tr></thead><tbody>
-    <tr><td>0</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n">${usd(-o.inv)}</td><td class="n">${usd(-o.inv)}</td></tr>${o.flows.map(clientRow).join('')}</tbody></table>`;
+    <tr><td>0</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n">${MX(-o.inv)}</td><td class="n">${MX(-o.inv)}</td></tr>${o.flows.map(clientRow).join('')}</tbody></table>`;
   if (o.renta) {
     setO('rentKpi',
       kpi('Renta mensual', mx(o.rentaMes)) + kpi('Renta mínima', mx(o.rentaMinMes)) + kpi('Renta máx. para que ahorre', mx(o.rentaMaxMes)) +
-      kpi('Ahorro cliente año 1', usd(o.ahorro1) + (o.ahorroPct != null ? ' · ' + nf0.format(o.ahorroPct) + ' %' : ''), o.ahorro1 > 0 ? 'good' : 'bad') +
-      kpi('Tu ROI', pct(o.sRoi, 0)) + kpi('Tu VAN', usd(o.sVan), o.sVan > 0 ? 'good' : 'bad') + kpi('Tu TIR', tirTxtOf(o.sTir), o.sellerOk ? 'good' : 'warn'));
+      kpi('Ahorro cliente año 1', mx(o.ahorro1 * P.tc) + (o.ahorroPct != null ? ' · ' + nf0.format(o.ahorroPct) + ' %' : ''), o.ahorro1 > 0 ? 'good' : 'bad') +
+      kpi('Tu ROI', pct(o.sRoi, 0)) + kpi('Tu VAN', mx(o.sVan * P.tc), o.sVan > 0 ? 'good' : 'bad') + kpi('Tu TIR', tirTxtOf(o.sTir), o.sellerOk ? 'good' : 'warn'));
     setO('ch1', barSVG(cats, [{ vals: o.flows.map(f => f.gasto), color: 'var(--c2)' }, { vals: o.flows.map(f => f.pago + f.elec), color: 'var(--c1)' }], 'Gasto actual contra renta y electricidad por año'));
     setO('ch2', lineSVG(['0'].concat(o.sflows.map(f => String(f.t))), [-o.I0].concat(o.sflows.map(f => f.cum)), 'Tu posición acumulada por año'));
     setO('flowTbl', `<h3 style="padding:10px 10px 0">Cliente</h3>${clientTbl}
       <h3 style="padding:14px 10px 0">Tú</h3><table class="t"><thead><tr><th>Año</th><th class="n">Ingreso por renta</th><th class="n">Insumos, visitas y servicio</th><th class="n">Neto</th><th class="n">Valor residual</th><th class="n">Acumulado</th></tr></thead><tbody>
-      <tr><td>0</td><td class="n"></td><td class="n"></td><td class="n">${usd(-o.I0)}</td><td class="n"></td><td class="n">${usd(-o.I0)}</td></tr>
-      ${o.sflows.map(f => `<tr><td>${f.t}</td><td class="n">${usd(f.inc)}</td><td class="n">${usd(f.cst)}</td><td class="n">${usd(f.net)}</td><td class="n">${f.res ? usd(f.res) : '—'}</td><td class="n" style="color:${f.cum >= 0 ? 'var(--good)' : 'var(--bad)'}">${usd(f.cum)}</td></tr>`).join('')}</tbody></table>`);
+      <tr><td>0</td><td class="n"></td><td class="n"></td><td class="n">${MX(-o.I0)}</td><td class="n"></td><td class="n">${MX(-o.I0)}</td></tr>
+      ${o.sflows.map(f => `<tr><td>${f.t}</td><td class="n">${MX(f.inc)}</td><td class="n">${MX(f.cst)}</td><td class="n">${MX(f.net)}</td><td class="n">${f.res ? MX(f.res) : '—'}</td><td class="n" style="color:${f.cum >= 0 ? 'var(--good)' : 'var(--bad)'}">${MX(f.cum)}</td></tr>`).join('')}</tbody></table>`);
     setO('sellOut', `<div class="tw"><table class="t"><tbody>
-      <tr><td>Costo de equipos${R.lines.some(l => !(l.e.costo > 0)) ? ' (los sin costo capturado se estiman al ' + nf0.format(P.costoPct) + ' % del precio de venta)' : ''}</td><td class="n">${usd(o.costoEq)}</td></tr>
+      <tr><td>Costo de equipos${P.envioPct > 0 ? ' (incluye ' + pct(P.envioPct, 1) + ' de envío)' : ''}${R.faltan ? ' <span class="chip bad">hay equipos sin costo de compra ($0)</span>' : ''}</td><td class="n">${usd(o.costoEq)}</td></tr>
       <tr><td>Instalación (tu costo: ${mx(P.instCosto || 0)})</td><td class="n">${usd(o.instCostoUSD)}</td></tr>
       <tr><td>Instalación cobrada (${mx(P.instCobro || 0)})</td><td class="n">-${usd(o.inst)}</td></tr>
       <tr class="sub"><td>Tu inversión inicial</td><td class="n">${usd(o.I0)}</td></tr>
@@ -1013,14 +1133,14 @@ function paintRent() {
     return;
   }
   setO('rentKpi',
-    kpi('Inversión del cliente', usd(o.precio)) + kpi('Ahorro año 1', usd(o.ahorro1) + (o.ahorroPct != null ? ' · ' + nf0.format(o.ahorroPct) + ' %' : '')) +
-    kpi('ROI', pct(o.roi, 0)) + kpi('VAN', usd(o.van), o.hasEq ? (o.van > 0 ? 'good' : 'bad') : '') + kpi('TIR', tirTxtOf(o.tir), o.hasEq ? (o.clientOk ? 'good' : 'warn') : '') +
+    kpi('Inversión del cliente', usd(o.precio)) + kpi('Ahorro año 1', mx(o.ahorro1 * P.tc) + (o.ahorroPct != null ? ' · ' + nf0.format(o.ahorroPct) + ' %' : '')) +
+    kpi('ROI', pct(o.roi, 0)) + kpi('VAN', mx(o.van * P.tc), o.hasEq ? (o.van > 0 ? 'good' : 'bad') : '') + kpi('TIR', tirTxtOf(o.tir), o.hasEq ? (o.clientOk ? 'good' : 'warn') : '') +
     kpi('Precio máx. (VAN 0)', usd(Math.max(0, o.pMaxVan))) + kpi('Precio máx. (TIR obj.)', usd(Math.max(0, o.pMaxTir))));
   setO('ch1', barSVG(cats, [{ vals: o.flows.map(f => f.gasto), color: 'var(--c2)' }, { vals: o.flows.map(f => f.ins + f.elec), color: 'var(--c1)' }], 'Gasto actual contra insumos y electricidad por año'));
   setO('ch2', lineSVG(['0'].concat(o.flows.map(f => String(f.t))), [-o.precio].concat(o.flows.map(f => f.cum)), 'Posición acumulada del cliente por año'));
   setO('flowTbl', clientTbl);
   setO('sellOut', `<div class="tw"><table class="t"><tbody>
-    <tr><td>Costo de equipos${R.lines.some(l => !(l.e.costo > 0)) ? ' (los sin costo capturado se estiman al ' + nf0.format(P.costoPct) + ' % del precio de venta)' : ''}</td><td class="n">${usd(o.costoEq)}</td></tr>
+    <tr><td>Costo de equipos${P.envioPct > 0 ? ' (incluye ' + pct(P.envioPct, 1) + ' de envío)' : ''}${R.faltan ? ' <span class="chip bad">hay equipos sin costo de compra ($0)</span>' : ''}</td><td class="n">${usd(o.costoEq)}</td></tr>
     <tr><td>Instalación (tu costo: ${mx(P.instCosto || 0)})</td><td class="n">${usd(o.instCostoUSD)}</td></tr>
     <tr><td>Insumos del año 1 ${P.y1 ? '(incluidos en el precio)' : '(no incluidos)'}</td><td class="n">${P.y1 ? usd(o.t.ins) : usd(0)}</td></tr>
     <tr><td>&nbsp;&nbsp;de los cuales, visitas de servicio</td><td class="n">${P.y1 ? usd(o.t.vis) : usd(0)}</td></tr>
@@ -1067,33 +1187,133 @@ function paintCot() {
     <p class="muted" style="margin:10px 0 0">Mínimo del proyecto: ${usd(o.pMin)} antes de IVA. ${o.hasEq && o.precio < o.pMin - 0.005 ? '<span class="chip bad">Precio bajo el mínimo</span>' : ''}</p>`);
 }
 
-function repData() {
-  const rows = R.areas.map(ar => {
-    const m = perMult(ar);
-    return { n: ar.a.nombre || 'Sin nombre', cat: ar.a.cat, hab: ar.a.cat === 'Habitaciones', gar: ar.a.gar * m, bot: ar.a.bot * m, L: ar.Ld * m, kwh: ar.kwh / ar.dias * m, elec: ar.elec / ar.dias * m, gasto: ar.gastoMXN / ar.dias * m, qty: ar.qty };
+const ECO_DEF = { ecoPetBotG: 15, ecoGarKg: 0.75, ecoGarUsos: 25, ecoFePet: 2.5, ecoDistKm: 40, ecoFeKm: 0.7, ecoCamionL: 4000, ecoFeElec: 0.438 };
+function ecoData(per) {
+  const p = P, rows = R.areas.filter(ar => ar.hasEq).map(ar => {
+    const m = perMult(ar, per), garS = ar.garA / ar.dias * m, botS = ar.botA / ar.dias * m, L = garS * p.lGar + botS * p.mlBot / 1000;
+    const petBot = botS * p.ecoPetBotG / 1000, petGar = garS * p.ecoGarKg / Math.max(1, p.ecoGarUsos), pet = petBot + petGar;
+    const co2Pet = pet * p.ecoFePet, co2Tr = L / Math.max(1, p.ecoCamionL) * p.ecoDistKm * p.ecoFeKm, antes = co2Pet + co2Tr;
+    const kwh = ar.kwh / ar.dias * m, despues = kwh * p.ecoFeElec;
+    return { n: ar.a.nombre || 'Sin nombre', cat: ar.a.cat || 'Sin categoría', garS, botS, L, petBot, petGar, pet, co2Pet, co2Tr, antes, kwh, despues, red: antes - despues };
   });
-  const sum = list => list.reduce((s, r) => ({ gar: s.gar + r.gar, bot: s.bot + r.bot, L: s.L + r.L, kwh: s.kwh + r.kwh, elec: s.elec + r.elec, gasto: s.gasto + r.gasto }), { gar: 0, bot: 0, L: 0, kwh: 0, elec: 0, gasto: 0 });
-  return { rows, hab: sum(rows.filter(r => r.hab)), cc: sum(rows.filter(r => !r.hab)), all: sum(rows) };
+  const keys = ['garS', 'botS', 'L', 'petBot', 'petGar', 'pet', 'co2Pet', 'co2Tr', 'antes', 'kwh', 'despues', 'red'];
+  const sum = list => list.reduce((s, r) => { keys.forEach(k => { s[k] += r[k] || 0; }); return s; }, Object.fromEntries(keys.map(k => [k, 0])));
+  const order = (P.cats || []).slice(); rows.forEach(r => { if (order.indexOf(r.cat) < 0) order.push(r.cat); });
+  const groups = order.map(c => ({ cat: c, rows: rows.filter(r => r.cat === c) })).filter(g => g.rows.length).map(g => Object.assign(g, { sum: sum(g.rows) }));
+  const all = sum(rows); all.pct = all.antes > 0 ? all.red / all.antes * 100 : null; all.km = all.red / 0.17;
+  return { rows, groups, all };
+}
+function ecoPanel() {
+  return `<details class="panel" style="margin-bottom:16px"><summary style="cursor:pointer;font-weight:600">Supuestos del análisis de impacto ambiental (editables)</summary>
+  <p class="muted" style="margin:10px 0 12px">Valores de referencia. Cámbialos por los datos reales del cliente y de su proveedor de agua para afinar el resultado.</p>
+  <div class="grid">${fld('Peso de una botella PET', 'p:ecoPetBotG', { suf: 'g', hint: 'Botella del tamaño configurado en Datos del proyecto' })}
+  ${fld('Peso de un garrafón', 'p:ecoGarKg', { suf: 'kg', hint: 'Plástico del garrafón retornable' })}
+  ${fld('Usos de vida de un garrafón', 'p:ecoGarUsos', { suf: 'llenados', hint: 'El residuo por uso es peso ÷ usos' })}
+  ${fld('Emisiones de producir PET', 'p:ecoFePet', { suf: 'kg CO₂e/kg', hint: 'Resina y soplado de botella' })}
+  ${fld('Distancia de reparto', 'p:ecoDistKm', { suf: 'km por viaje', hint: 'Ida y vuelta, planta a cliente' })}
+  ${fld('Emisiones del camión de reparto', 'p:ecoFeKm', { suf: 'kg CO₂e/km' })}
+  ${fld('Carga por viaje de reparto', 'p:ecoCamionL', { suf: 'litros' })}
+  ${fld('Factor de emisión eléctrico', 'p:ecoFeElec', { suf: 'kg CO₂e/kWh', hint: 'Red eléctrica de México, aprox.' })}</div></details>`;
+}
+function ecoHTML(d, lab, cliente) {
+  const a = d.all, hasG = d.groups.length > 1;
+  const row = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.garS)}</td><td class="n">${nf2f.format(r.botS)}</td><td class="n">${nf2f.format(r.pet)}</td><td class="n">${nf2f.format(r.antes)}</td><td class="n">${nf2f.format(r.despues)}</td><td class="n">${nf2f.format(r.red)}</td></tr>`;
+  const sub = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${nf2f.format(r.garS)}</td><td class="n">${nf2f.format(r.botS)}</td><td class="n">${nf2f.format(r.pet)}</td><td class="n">${nf2f.format(r.antes)}</td><td class="n">${nf2f.format(r.despues)}</td><td class="n">${nf2f.format(r.red)}</td></tr>`;
+  return `<table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Garrafones evitados</th><th class="n">Botellas evitadas</th><th class="n">Residuo de plástico evitado (kg)</th><th class="n">Huella actual (kg CO₂e)</th><th class="n">Huella con purificadores (kg CO₂e)</th><th class="n">Reducción (kg CO₂e)</th></tr></thead><tbody>
+    ${d.groups.map(g => g.rows.map(row).join('') + (hasG ? sub('Subtotal ' + g.cat, g.sum, 'sub') : '')).join('')}${sub('Total', a, 'tot')}</tbody></table>`;
+}
+const ecoNota = () => `Huella actual = producción del plástico (PET de botellas y garrafones) + reparto del agua embotellada. Huella con purificadores = electricidad de los equipos (${nf2.format(P.ecoFeElec)} kg CO₂e/kWh). El análisis no incluye la fabricación de equipos ni el reciclaje de insumos. Los factores son de referencia y pueden ajustarse.`;
+function paintEco() {
+  const d = ecoData(UI.per), lab = perLab(), a = d.all;
+  if (!d.rows.length) return '';
+  return `<div class="panel"><h2>Impacto ambiental ${lab}: huella de carbono y residuos de PET</h2>
+  <div class="strip" style="margin-bottom:12px">${kpi('Residuo de plástico evitado ' + lab, nf2f.format(a.pet) + ' kg', 'good')}${kpi('Botellas evitadas', nf2f.format(a.botS))}${kpi('Garrafones evitados', nf2f.format(a.garS))}${kpi('Huella actual', nf2f.format(a.antes) + ' kg CO₂e')}${kpi('Huella con purificadores', nf2f.format(a.despues) + ' kg CO₂e')}${kpi('Reducción de huella', nf2f.format(a.red) + ' kg CO₂e' + (a.pct != null ? ' · ' + nf2f.format(a.pct) + ' %' : ''), a.red > 0 ? 'good' : 'bad')}</div>
+  <div class="tw">${ecoHTML(d, lab)}</div>
+  <p class="muted" style="margin:10px 0 0">${esc(ecoNota())}${a.red > 0 ? ' La reducción de ' + nf2f.format(a.red) + ' kg CO₂e equivale a unos ' + nf2f.format(a.km) + ' km recorridos en un auto promedio (0.17 kg CO₂e/km).' : ''}</p></div>`;
+}
+function repData(per) {
+  const rows = R.areas.filter(ar => ar.hasEq).map(ar => {
+    const m = perMult(ar, per);
+    return { n: ar.a.nombre || 'Sin nombre', cat: ar.a.cat || 'Sin categoría', gar: ar.a.gar * m, bot: ar.a.bot * m, L: ar.Ld * m, feed: ar.feed * m, rej: ar.rej * m, kwh: ar.kwh / ar.dias * m, elec: ar.elec / ar.dias * m, gasto: ar.gastoMXN / ar.dias * m, qty: ar.qty };
+  });
+  const z = () => ({ gar: 0, bot: 0, L: 0, feed: 0, rej: 0, kwh: 0, elec: 0, gasto: 0, qty: 0 });
+  const sum = list => list.reduce((s, r) => { Object.keys(s).forEach(k => { s[k] += r[k] || 0; }); return s; }, z());
+  const order = (P.cats || []).slice(); rows.forEach(r => { if (order.indexOf(r.cat) < 0) order.push(r.cat); });
+  const groups = order.map(c => ({ cat: c, rows: rows.filter(r => r.cat === c) })).filter(g => g.rows.length).map(g => Object.assign(g, { sum: sum(g.rows) }));
+  return { rows, groups, all: sum(rows) };
+}
+function refHTML(per) {
+  const lab = perLab(), p = P;
+  const rows = R.areas.map(ar => {
+    const m = perMult(ar, per), a = ar.a, rep = a.gar * p.lGar + a.bot * p.mlBot / 1000 + (a.lit || 0);
+    return { ar, n: a.nombre || 'Sin nombre', cat: a.cat || 'Sin categoría', gar: a.gar, bot: a.bot, lit: a.lit || 0, dias: ar.dias, rep: rep * m, cons: ar.Ld * m, eq: ar.hasEq };
+  });
+  const tot = rows.reduce((s, r) => ({ rep: s.rep + r.rep, cons: s.cons + r.cons }), { rep: 0, cons: 0 });
+  if (!rows.length) return '';
+  return `<div class="tw"><table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Garrafones por día</th><th class="n">Botellas por día</th><th class="n">Otros litros por día</th><th class="n">Días de operación</th><th class="n">Litros reportados ${lab}</th><th class="n">Litros considerados ${lab}</th><th>Con equipos</th></tr></thead><tbody>
+  ${rows.map(r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.gar)}</td><td class="n">${nf2f.format(r.bot)}</td><td class="n">${nf2f.format(r.lit)}</td><td class="n">${nf2f.format(r.dias)}</td><td class="n">${nf2f.format(r.rep)}</td><td class="n">${r.eq ? nf2f.format(r.cons) : '—'}</td><td>${r.eq ? 'Sí' : 'No'}</td></tr>`).join('')}
+  <tr class="tot"><td colspan="6">Total</td><td class="n">${nf2f.format(tot.rep)}</td><td class="n">${nf2f.format(R.areas.filter(a => a.hasEq).reduce((s, ar) => s + ar.Ld * perMult(ar, per), 0))}</td><td></td></tr></tbody></table></div>
+  <p class="muted s" style="margin:8px 0 0">Los litros reportados son lo que el cliente consume hoy: garrafones × ${nf2f.format(p.lGar)} L + botellas × ${nf2f.format(p.mlBot)} ml + otros litros. Los litros considerados aplican el ${nf2f.format(p.sust)} % de consumo sustituido y solo cuentan las áreas con equipos.</p>`;
+}
+function methodHTML(rn) {
+  const p = P, N = Math.max(1, Math.round(p.horizonte || 5)), n2 = nf2f.format;
+  const li = (t, d) => `<li><b>${t}.</b> ${d}</li>`;
+  return `<ul class="metodo" style="margin:0;padding-left:20px;line-height:1.6">
+  ${li('Consumo reportado', `lo capturado con el cliente en cada área: garrafones y botellas por día, otros litros y días de operación. Litros reportados = (garrafones × ${n2(p.lGar)} L + botellas × ${n2(p.mlBot)} ml ÷ 1,000 + otros litros) × días del periodo`)}
+  ${li('Litros por día de un área', `(garrafones por día × ${n2(p.lGar)} L + botellas por día × ${n2(p.mlBot)} ml ÷ 1,000) × ${n2(p.sust)} % de consumo sustituido + otros litros por día que se purifican sin costo actual`)}
+  ${li('Litros por mes y por año', `litros por día × días de operación al año (${p.dias} por defecto; cada área puede tener los suyos). El mes se calcula como el año ÷ 12`)}
+  ${li('Garrafones y botellas sustituidos', 'cantidad por día × días de operación × % de consumo sustituido')}
+  ${li('Gasto actual', `(garrafones × $ ${n2(p.pGar)} + botellas × $ ${n2(p.pBot)}) × días de operación × % de consumo sustituido${p.promOn && p.promGasto > 0 ? '. En el ahorro mensual se usa el gasto promedio mensual capturado con el cliente' : ''}`)}
+  ${li('Agua de alimentación y rechazo', 'agua de alimentación = agua producida ÷ (1 − % de rechazo del equipo). El rechazo es la alimentación menos el agua producida. En un área con varios equipos, el agua producida se reparte según la capacidad de cada uno (litros por hora × horas de producción)')}
+  ${li('m³ por m³ producido', 'agua de alimentación ÷ agua producida')}
+  ${li('Consumo eléctrico', `potencia del equipo (W) ÷ 1,000 × horas de uso por día × días de operación × número de equipos. El costo es kWh × $ ${n2(p.tarifa)} por kWh`)}
+  ${li('Gasto mensual con el proyecto', `${rn ? 'renta mensual de los equipos' : 'insumos y servicio del primer año ÷ 12'} + electricidad ÷ 12`)}
+  ${li('Ahorro mensual', 'gasto mensual actual − gasto mensual con el proyecto. El porcentaje es el ahorro ÷ el gasto mensual actual')}
+  ${li('Ahorro mensual después de la inversión', `${rn ? 'instalación' : 'inversión del cliente'} ÷ (${N} años × 12 meses), restada del ahorro mensual`)}
+  ${li('Costo por litro', 'gasto mensual ÷ litros por mes, antes y con el proyecto')}
+  ${li('Residuo de plástico evitado', `botellas sustituidas × ${n2(p.ecoPetBotG)} g + garrafones sustituidos × ${n2(p.ecoGarKg)} kg ÷ ${n2(p.ecoGarUsos)} llenados de vida del garrafón`)}
+  ${li('Huella de carbono actual', `kg de plástico × ${n2(p.ecoFePet)} kg CO₂e/kg (producción) + litros sustituidos ÷ ${n2(p.ecoCamionL)} L por viaje × ${n2(p.ecoDistKm)} km × ${n2(p.ecoFeKm)} kg CO₂e/km (reparto)`)}
+  ${li('Huella con purificadores', `kWh de los equipos × ${n2(p.ecoFeElec)} kg CO₂e/kWh`)}
+  ${li('Reducción de huella', 'huella actual − huella con purificadores; el porcentaje es la reducción ÷ la huella actual. Se compara con un auto promedio de 0.17 kg CO₂e por km')}
+  </ul>`;
 }
 function paintRep() {
   const d = repData(), lab = perLab();
-  const wr = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf1.format(r.gar)}</td><td class="n">${nf1.format(r.bot)}</td><td class="n">${nf0.format(r.L)}</td><td class="n">${nf1.format(r.L / 1000)}</td><td class="n">${mxn(r.gasto)}</td></tr>`;
-  const sr = (n, r, c) => `<tr class="${c}"><td colspan="2">${n}</td><td class="n">${nf1.format(r.gar)}</td><td class="n">${nf1.format(r.bot)}</td><td class="n">${nf0.format(r.L)}</td><td class="n">${nf1.format(r.L / 1000)}</td><td class="n">${mxn(r.gasto)}</td></tr>`;
-  const er = r => `<tr><td>${esc(r.n)}</td><td class="n">${r.qty}</td><td class="n">${nf1.format(r.kwh)}</td><td class="n">${mxn(r.elec)}</td><td class="n">${usd(r.elec / P.tc)}</td></tr>`;
-  const T = R.t;
-  setO('repOut', `
-  <div class="strip">${kpi('Agua purificada ' + lab, nf1.format(d.all.L / 1000) + ' m³')}${kpi('Garrafones sustituidos/año', nf0.format(T.garA))}${kpi('Botellas sustituidas/año', nf0.format(T.botA))}${kpi('Consumo eléctrico ' + lab, nf0.format(d.all.kwh) + ' kWh')}${kpi('Costo eléctrico ' + lab, mxn(d.all.elec))}</div>
-  <div class="cols2" style="margin-bottom:16px">
-    <div class="panel"><h2>Litros ${lab} por área</h2>${hbars(d.rows.map(r => ({ n: r.n, v: r.L })), v => nf0.format(v) + ' L')}</div>
-    <div class="panel"><h2>kWh ${lab} por área</h2>${hbars(d.rows.map(r => ({ n: r.n, v: r.kwh })), v => nf1.format(v) + ' kWh')}</div>
+  const hasG = d.groups.length > 1;
+  const wr = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.gar)}</td><td class="n">${nf2f.format(r.bot)}</td><td class="n">${nf2f.format(r.L)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${mxn2(r.gasto)}</td></tr>`;
+  const sr = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${nf2f.format(r.gar)}</td><td class="n">${nf2f.format(r.bot)}</td><td class="n">${nf2f.format(r.L)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${mxn2(r.gasto)}</td></tr>`;
+  const er = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${r.qty}</td><td class="n">${nf2f.format(r.kwh)}</td><td class="n">${mxn2(r.elec)}</td><td class="n">${usd2(r.elec / P.tc)}</td></tr>`;
+  const se = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${r.qty}</td><td class="n">${nf2f.format(r.kwh)}</td><td class="n">${mxn2(r.elec)}</td><td class="n">${usd2(r.elec / P.tc)}</td></tr>`;
+  const ratio = r => r.L > 0 ? nf2f.format(r.feed / r.L) : '—';
+  const rr = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${nf2f.format(r.feed / 1000)}</td><td class="n">${nf2f.format(r.rej / 1000)}</td><td class="n">${ratio(r)}</td></tr>`;
+  const sw = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${nf2f.format(r.feed / 1000)}</td><td class="n">${nf2f.format(r.rej / 1000)}</td><td class="n">${ratio(r)}</td></tr>`;
+  const T = R.areas.filter(ar => ar.hasEq).reduce((s, ar) => ({ garA: s.garA + ar.garA, botA: s.botA + ar.botA }), { garA: 0, botA: 0 }), nSin = R.areas.filter(ar => !ar.hasEq).length;
+  const mr = R.missRech, aviso = mr.length ? `<div class="banner warn" style="margin:0 0 12px"><div><strong>Falta el % de rechazo de agua</strong><p>Captúralo en Registro de insumos para: ${mr.map(e => esc(e.parte || e.nombre)).join(', ')}. Mientras tanto se calcula sin rechazo.</p></div></div>` : '';
+  const catSum = d.groups.length ? `<div class="panel"><h2>Resumen por categoría ${lab}</h2><div class="tw"><table class="t"><thead><tr><th>Categoría</th><th class="n">Áreas</th><th class="n">Agua purificada m³</th><th class="n">Agua de alimentación m³</th><th class="n">kWh</th><th class="n">Costo eléctrico MXN</th><th class="n">Gasto actual MXN</th></tr></thead><tbody>
+    ${d.groups.map(g => `<tr><td>${esc(g.cat)}</td><td class="n">${g.rows.length}</td><td class="n">${nf2f.format(g.sum.L / 1000)}</td><td class="n">${nf2f.format(g.sum.feed / 1000)}</td><td class="n">${nf2f.format(g.sum.kwh)}</td><td class="n">${mxn2(g.sum.elec)}</td><td class="n">${mxn2(g.sum.gasto)}</td></tr>`).join('')}
+    <tr class="tot"><td>Total</td><td class="n">${d.rows.length}</td><td class="n">${nf2f.format(d.all.L / 1000)}</td><td class="n">${nf2f.format(d.all.feed / 1000)}</td><td class="n">${nf2f.format(d.all.kwh)}</td><td class="n">${mxn2(d.all.elec)}</td><td class="n">${mxn2(d.all.gasto)}</td></tr></tbody></table></div></div>` : '';
+  const body = (rowFn, subFn, totFn) => d.groups.map(g => g.rows.map(rowFn).join('') + (hasG ? subFn('Subtotal ' + g.cat, g.sum, 'sub') : '')).join('') + totFn('Total', d.all, 'tot');
+  setO('repOut', `${aviso}
+  <div class="panel" style="margin-bottom:16px"><h2>Consumo reportado por área (referencia) ${lab}</h2>${refHTML(UI.per)}</div>
+  <div class="strip">${kpi('Agua purificada ' + lab, nf2f.format(d.all.L / 1000) + ' m³')}${kpi('Agua de alimentación ' + lab, nf2f.format(d.all.feed / 1000) + ' m³')}${kpi('Rechazo ' + lab, nf2f.format(d.all.rej / 1000) + ' m³')}${kpi('Garrafones sustituidos/año', nf2f.format(T.garA))}${kpi('Botellas sustituidas/año', nf2f.format(T.botA))}${kpi('Consumo eléctrico ' + lab, nf2f.format(d.all.kwh) + ' kWh')}${kpi('Costo eléctrico ' + lab, mxn2(d.all.elec))}</div>
+  ${catSum}
+  <div class="cols2" style="margin:16px 0">
+    <div class="panel"><h2>Litros ${lab} por categoría</h2>${hbars(d.groups.map(g => ({ n: g.cat, v: g.sum.L })), v => nf2f.format(v) + ' L')}</div>
+    <div class="panel"><h2>kWh ${lab} por categoría</h2>${hbars(d.groups.map(g => ({ n: g.cat, v: g.sum.kwh })), v => nf2f.format(v) + ' kWh')}</div>
   </div>
-  <div class="panel"><h2>Consumo de agua ${lab}</h2><div class="tw"><table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Garrafones</th><th class="n">Botellas</th><th class="n">Litros</th><th class="n">m³</th><th class="n">Gasto actual MXN</th></tr></thead><tbody>
-    ${d.rows.map(wr).join('')}
-    ${sr('Habitaciones', d.hab, 'sub')}${sr('Centros de consumo', d.cc, 'sub')}${sr('Total', d.all, 'tot')}</tbody></table></div></div>
-  <div class="panel"><h2>Consumo eléctrico ${lab}</h2><div class="tw"><table class="t"><thead><tr><th>Área</th><th class="n">Equipos</th><th class="n">kWh</th><th class="n">Costo MXN</th><th class="n">Costo USD</th></tr></thead><tbody>
-    ${d.rows.map(er).join('')}
-    <tr class="tot"><td>Total</td><td class="n"></td><td class="n">${nf1.format(d.all.kwh)}</td><td class="n">${mxn(d.all.elec)}</td><td class="n">${usd(d.all.elec / P.tc)}</td></tr></tbody></table></div>
-  <p class="muted" style="margin:10px 0 0">Consumo eléctrico estimado con potencia promedio y horas de uso de cada equipo de la lista de precios.</p></div>`);
+  <div class="cols2" style="margin-bottom:16px">
+    <div class="panel"><h2>Litros ${lab} por área</h2>${hbars(d.rows.map(r => ({ n: r.n, v: r.L })), v => nf2f.format(v) + ' L')}</div>
+    <div class="panel"><h2>kWh ${lab} por área</h2>${hbars(d.rows.map(r => ({ n: r.n, v: r.kwh })), v => nf2f.format(v) + ' kWh')}</div>
+  </div>
+  <div class="panel"><h2>Consumo de agua ${lab}</h2>${nSin ? `<p class="muted" style="margin:0 0 10px">Solo se incluyen las áreas con equipos asignados. ${nSin === 1 ? 'Hay 1 área sin equipos que no se cuenta' : 'Hay ' + nSin + ' áreas sin equipos que no se cuentan'}.</p>` : ''}<div class="tw"><table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Garrafones</th><th class="n">Botellas</th><th class="n">Litros</th><th class="n">m³</th><th class="n">Gasto actual MXN</th></tr></thead><tbody>
+    ${body(wr, sr, sr)}</tbody></table></div></div>
+  <div class="panel"><h2>Agua producida y de alimentación (ósmosis inversa) ${lab}</h2><p class="muted" style="margin:0 0 10px">El agua de alimentación es lo que consumen los equipos: agua producida ÷ (1 − % de rechazo). La última columna son los m³ consumidos por cada m³ producido.</p><div class="tw"><table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Producida m³</th><th class="n">Alimentación m³</th><th class="n">Rechazo m³</th><th class="n">m³ por m³ producido</th></tr></thead><tbody>
+    ${body(rr, sw, sw)}</tbody></table></div></div>
+  <div class="panel"><h2>Consumo eléctrico ${lab}</h2><div class="tw"><table class="t"><thead><tr><th>Área</th><th>Categoría</th><th class="n">Equipos</th><th class="n">kWh</th><th class="n">Costo MXN</th><th class="n">Costo USD</th></tr></thead><tbody>
+    ${body(er, se, se)}</tbody></table></div>
+  <p class="muted" style="margin:10px 0 0">Consumo eléctrico estimado con potencia promedio y horas de uso de cada equipo de la lista de precios.</p></div>
+  ${paintEco()}
+  <details class="panel" style="margin-top:16px"><summary style="cursor:pointer;font-weight:600">Cómo se calcula cada consumo</summary><div style="margin-top:12px">${methodHTML(R.renta)}</div></details>`);
 }
 function paintHeader() {
   const s = $('#projSel');
@@ -1155,7 +1375,7 @@ function mergeState(imp) {
   S.projects.forEach(p => { p.descLineas = p.descLineas || {}; p.areas = p.areas || []; p.cfg = p.cfg || {}; });
   for (const id of Object.keys(imp.kits || {})) { if (!S.kits[id] || (!S.kits[id].length && imp.kits[id].length) || (imp.rev || 0) > (S.rev || 0)) S.kits[id] = imp.kits[id]; }
   if (Array.isArray(imp.insCat)) { const have = insIdx(); for (const x of imp.insCat) { const m = have[String(x.p).toLowerCase()]; if (!m) S.insCat.push(x); else if ((imp.rev || 0) > (S.rev || 0)) m.c = x.c; } insDirty = true; }
-  catDirty = true; touch('cat');
+  normCat(); catDirty = true; touch('cat');
   return { added, upd, cadd };
 }
 
@@ -1174,11 +1394,11 @@ function quoteHTML() {
       <tr><td>Ahorro estimado el primer año</td><td class="n">${mx(o.ahorro1 * tc)}</td></tr></tbody></table>
       <p class="s">Estimación basada en los consumos y precios capturados con el cliente. Los resultados reales pueden variar.</p>`
       : `<h2>Ahorro estimado</h2><table><tbody>
-      <tr><td>Gasto actual en agua embotellada (año 1)</td><td class="n">${usd(o.t.gasto)}</td></tr>
-      <tr><td>Ahorro neto año 1</td><td class="n">${usd(o.ahorro1)}</td></tr>
+      <tr><td>Gasto actual en agua embotellada (año 1)</td><td class="n">${mx(o.t.gastoMXN)}</td></tr>
+      <tr><td>Ahorro neto año 1</td><td class="n">${mx(o.ahorro1 * P.tc)}</td></tr>
       <tr><td>Recuperación de la inversión</td><td class="n">${o.payback == null ? 'más de ' + P.horizonte + ' años' : nf1.format(o.payback) + ' años'}</td></tr>
       <tr><td>ROI a ${P.horizonte} años</td><td class="n">${pct(o.roi, 0)}</td></tr>
-      <tr><td>VAN a ${P.horizonte} años (tasa ${pct(P.tasa, 1)})</td><td class="n">${usd(o.van)}</td></tr>
+      <tr><td>VAN a ${P.horizonte} años (tasa ${pct(P.tasa, 1)})</td><td class="n">${mx(o.van * P.tc)}</td></tr>
       <tr><td>TIR</td><td class="n">${o.tir === Infinity ? 'superior a 1,000 %' : tirTxtOf(o.tir)}</td></tr></tbody></table>
       <p class="s">Estimación basada en los consumos y precios capturados con el cliente. Los resultados reales pueden variar.</p>`;
   }
@@ -1206,13 +1426,131 @@ function quoteHTML() {
   ${ahorro}${P.notas ? `<h2>Notas y condiciones</h2><p>${esc(P.notas).replace(/\n/g, '<br>')}</p>` : ''}</body></html>`;
 }
 
+function analysisHTML() {
+  const o = R, rn = o.renta, tc = P.tc, env = 1 + Math.max(0, P.envioPct || 0) / 100, v = verdictInfo();
+  const MXn = n => (n < 0 ? '-' : '') + '$ ' + nf0.format(Math.abs(Math.round(n * tc)));
+  const tr = (a, b, c) => `<tr class="${c || ''}"><td>${a}</td><td class="n">${b}</td></tr>`;
+  const par = [['Modalidad', rn ? 'Renta (Lista 1, MXN/mes)' : 'Venta (USD)'], ['Tipo de cambio', '$ ' + nf2.format(tc) + ' MXN/USD'], ['Horizonte', o.N + ' años'], ['Tasa de descuento', pct(P.tasa, 1)], ['TIR mínima', pct(P.tirObj, 0)],
+    ['Margen mínimo', rn ? '—' : pct(P.margenMin, 0)], ['Costo de envío sobre equipos e insumos', pct(P.envioPct || 0, 1)], ['Sustitución del agua embotellada', pct(P.sust, 0)], ['Horas de producción por día', String(o.hrsDef)],
+    ['Alza anual del gasto actual', pct(P.igasto, 1)], ['Alza anual de insumos y electricidad', pct(P.icosto, 1)], ['Días de operación al año', String(P.dias)]];
+  const resumen = rn ? [
+    tr('Costo de equipos' + (P.envioPct > 0 ? ' (incluye ' + pct(P.envioPct, 1) + ' de envío)' : ''), usd(o.costoEq)), tr('Instalación cobrada', '-' + usd(o.inst)), tr('Tu inversión inicial', usd(o.I0), 'sub'),
+    tr('Renta mensual (sin IVA)', mx(o.rentaMes)), tr('Renta mínima mensual', mx(o.rentaMinMes)), tr('Ingreso anual por renta (año 1)', usd(o.rentaAnual)),
+    tr('Insumos y servicio (año 1)', usd(o.t.ins)), tr('&nbsp;&nbsp;de los cuales, visitas de servicio', usd(o.t.vis)), tr('Depreciación anual', usd(o.depAnual)),
+    tr('Valor residual al año ' + o.N, usd(o.vlibros) + (P.resid ? ' (incluido)' : ' (no incluido)')), tr('Margen anual (año 1)', usd(o.rentaAnual - o.t.ins) + ' · ' + pct(o.margenRenta), 'tot'),
+    tr('Utilidad anual tras depreciación', usd(o.rentaAnual - o.t.ins - o.depAnual)), tr('Tu ROI / VAN / TIR', pct(o.sRoi, 0) + ' / ' + mx(o.sVan * P.tc) + ' / ' + tirTxtOf(o.sTir)),
+    tr('Ahorro del cliente año 1', mx(o.ahorro1 * P.tc) + (o.ahorroPct != null ? ' · ' + pct(o.ahorroPct, 0) : ''))] :
+    [tr('Costo de equipos' + (P.envioPct > 0 ? ' (incluye ' + pct(P.envioPct, 1) + ' de envío)' : ''), usd(o.costoEq)), tr('Instalación (tu costo)', usd(o.instCostoUSD)),
+    tr('Insumos del año 1 ' + (P.y1 ? '(incluidos en el precio)' : '(no incluidos)'), P.y1 ? usd(o.t.ins) : usd(0)), tr('&nbsp;&nbsp;de los cuales, visitas de servicio', P.y1 ? usd(o.t.vis) : usd(0)),
+    tr('Costo total del proyecto', usd(o.costo), 'sub'), tr('Precio de venta (sin IVA)', usd(o.precio)), tr('Margen', usd(o.margen) + ' · ' + pct(o.margenPct), 'tot'),
+    tr('Precio mínimo con margen de ' + pct(P.margenMin, 0), usd(o.pMin)), tr('Descuento total sobre lista', pct(o.descTotalPct, 1)),
+    tr('Cliente: ROI / VAN / TIR', pct(o.roi, 0) + ' / ' + mx(o.van * P.tc) + ' / ' + tirTxtOf(o.tir)), tr('Cliente: recuperación', o.payback == null ? 'más de ' + o.N + ' años' : nf1.format(o.payback) + ' años'),
+    tr('Cliente: ahorro año 1', mx(o.ahorro1 * P.tc) + (o.ahorroPct != null ? ' · ' + pct(o.ahorroPct, 0) : ''))];
+  const eqRows = o.plines.map(x => rn ?
+    `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${x.l.d ? pct(x.l.d, 1) : '—'}</td><td class="n">${usd(x.inc1)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.l.ins)}</td><td class="n">${usd(x.utilDep)}</td><td class="n">${tirTxtOf(x.tir)}</td><td class="n">${mx(x.van * tc)}</td><td class="n">${mx(x.rentaMinMes)}</td><td>${x.ok ? 'Rentable' : 'No rentable'}</td></tr>` :
+    `<tr><td>${esc(eqName(x.l.e))}</td><td class="n">${x.l.qty}</td><td class="n">${x.l.d ? pct(x.l.d, 1) : '—'}</td><td class="n">${usd(x.ingreso)}</td><td class="n">${usd(x.l.costo)}</td><td class="n">${usd(x.insY1)}</td><td class="n">${usd(x.margen)}</td><td class="n">${pct(x.margenPct)}</td><td class="n">${usd(x.pMin)}</td><td class="n">${tirTxtOf(x.tirC)}</td><td>${x.ok ? 'Rentable' : 'No rentable'}</td></tr>`).join('');
+  const eqHead = rn ? '<th>Equipo</th><th class="n">Cant.</th><th class="n">Desc.</th><th class="n">Renta anual</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas/año</th><th class="n">Utilidad tras deprec.</th><th class="n">TIR</th><th class="n">VAN</th><th class="n">Renta mín./mes</th><th>Resultado</th>'
+    : '<th>Equipo</th><th class="n">Cant.</th><th class="n">Desc.</th><th class="n">Ingreso</th><th class="n">Costo equipo</th><th class="n">Insumos y visitas</th><th class="n">Margen</th><th class="n">Margen %</th><th class="n">Precio mín.</th><th class="n">TIR cliente</th><th>Resultado</th>';
+  const notas = o.plines.map(x => `<p class="nota ${x.ok ? 'ok' : 'no'}"><b>${esc(eqName(x.l.e))}:</b> ${esc(x.nota)}</p>`).join('');
+  const insumos = o.lines.map(l => {
+    const cf = cfgOf(P, l.e.id), q = l.qty;
+    let body = l.kitLines.length ? l.kitLines.map(k => `<tr><td>${esc(k.parte)}</td><td>${esc(k.desc)}</td><td class="n">${nf2.format(k.qty)}</td><td class="n">${k.costo > 0 ? usd2(k.costo * env) : '<b>$0</b>'}</td><td class="n">${usd2(k.qty * k.costo * env * q)}</td></tr>`).join('')
+      : `<tr><td colspan="4">Sin kit registrado: póliza de referencia por equipo${l.e.insF > 0 ? '' : ' (<b>sin costo capturado</b>)'}</td><td class="n">${usd2(l.e.insF * env * q)}</td></tr>`;
+    const vis = q * cf.visN * cf.visC / tc;
+    return `<h3>${esc(eqName(l.e))} <span class="s">· ${q} ${q === 1 ? 'equipo' : 'equipos'} · vida útil ${cf.vida} años</span></h3><table><thead><tr><th>No. parte</th><th>Descripción</th><th class="n">Cant. por equipo</th><th class="n">Costo unit.${P.envioPct > 0 ? ' (con envío)' : ''}</th><th class="n">Importe año 1 (${q} ${q === 1 ? 'equipo' : 'equipos'})</th></tr></thead><tbody>${body}
+      <tr><td colspan="4">Visitas de servicio (${cf.visN} al año × ${mx(cf.visC)} × ${q})</td><td class="n">${usd2(vis)}</td></tr>
+      <tr class="tot"><td colspan="4">Total insumos y visitas, año 1</td><td class="n">${usd2(l.ins)}</td></tr></tbody></table>`;
+  }).join('');
+  const areas = o.areas.map(ar => {
+    const eqs = Object.values(ar.am).map(m => `${esc(eqName(m.e))} ×${m.qty}`).join('<br>') || '—';
+    return `<tr><td>${esc(ar.a.nombre || 'Sin nombre')}</td><td class="n">${nf0.format(ar.Ld)}</td><td class="n">${ar.dias}</td><td class="n">${nf0.format(ar.Lanio)}</td><td class="n">${mx(ar.gastoMXN)}</td><td>${eqs}</td><td class="n">${ar.cap > 0 ? nf0.format(ar.cap) : '—'}</td><td class="n">${ar.uso != null ? pct(ar.uso * 100, 0) : '—'}</td><td class="n">${usd(ar.ins)}</td><td class="n">${nf0.format(ar.kwh)}</td><td class="n">${mx(ar.elec)}</td></tr>`;
+  }).join('');
+  const t = o.t;
+  const flowC = o.flows.map(f => `<tr><td>${f.t}</td><td class="n">${MXn(f.gasto)}</td><td class="n">${rn ? MXn(f.pago) : (f.ins ? MXn(f.ins) : 'Incluidos')}</td><td class="n">${MXn(f.elec)}</td><td class="n">${MXn(f.F)}</td><td class="n">${MXn(f.cum)}</td></tr>`).join('');
+  const flowS = rn ? o.sflows.map(f => `<tr><td>${f.t}</td><td class="n">${MXn(f.inc)}</td><td class="n">${MXn(f.cst)}</td><td class="n">${MXn(f.net)}</td><td class="n">${f.res ? MXn(f.res) : '—'}</td><td class="n">${MXn(f.cum)}</td></tr>`).join('') : '';
+  const m = o.prom, prom = m && m.gM > 0 ? `<h2>Rentabilidad sobre promedio mensual</h2><table><tbody>
+    ${tr('Gasto promedio mensual actual', mx(m.gM))}${m.lM > 0 ? tr('Consumo promedio mensual', nf0.format(m.lM) + ' L') : ''}${tr(rn ? 'Renta mensual' : 'Insumos y visitas mensuales', mx(rn ? m.pagoM : m.insM))}${tr('Electricidad mensual', mx(m.elecM))}
+    ${tr('Ahorro mensual de operación', mx(m.ahorroOper) + ' · ' + pct(m.margenOper))}${tr('Inversión repartida en ' + o.N + ' años (mensual)', mx(m.amortM))}${tr('Ahorro mensual neto', mx(m.ahorroNeto) + ' · ' + pct(m.margenNeto), 'tot')}</tbody></table>` : '';
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Análisis de rentabilidad ${esc(P.cliente)}</title><style>
+  body{font:13px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#53555A;max-width:1100px;margin:0 auto;padding:28px 20px}
+  h1{font-size:21px;margin:0}h2{font-size:15px;margin:26px 0 8px;color:#0B7F87}h3{font-size:13px;margin:16px 0 6px;color:#53555A}.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #0B7F87;padding-bottom:12px;margin-bottom:14px}
+  table{border-collapse:collapse;width:100%;margin-bottom:6px}th,td{padding:6px 9px;border-bottom:1px solid #DCDEE0;text-align:left;vertical-align:top}th{font-size:11px;color:#6B6D72;background:#EEF9FA}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tot td{font-weight:700;border-top:2px solid #53555A}.sub td{font-weight:600;background:#F7FBFB}.s{color:#6B6D72;font-size:12px;font-weight:400}.conf{background:#FFF6E0;border:1px solid #E9C46A;padding:6px 10px;border-radius:6px;font-size:12px;margin-bottom:12px}
+  .ver{padding:10px 14px;border-radius:8px;background:#EEF9FA;border-left:4px solid #0B7F87;margin:10px 0}.nota{margin:6px 0;padding:6px 10px;border-radius:6px}.nota.ok{background:#E8F6EE}.nota.no{background:#FDECEC}
+  .par{columns:2;column-gap:28px}.par div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #EEE;padding:3px 0;break-inside:avoid}
+  @media print{body{padding:0}h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}
+  </style></head><body><div class="top"><div><img src="${LOGO}" alt="Purifika" style="height:56px;display:block;margin-bottom:6px"><h1>Análisis de rentabilidad</h1><div class="s">Documento interno del proveedor · no entregar al cliente</div></div>
+  <div class="s" style="text-align:right">${P.folio ? 'Folio: ' + esc(P.folio) + '<br>' : ''}Fecha: ${esc(P.fecha)}</div></div>
+  <div class="conf">Contiene costos de compra, márgenes e insumos. Es para uso interno.</div>
+  <p><b>Cliente:</b> ${esc(P.cliente || '—')}${P.ubicacion ? ' · <b>Ubicación:</b> ' + esc(P.ubicacion) : ''}${P.industria ? ' · <b>Industria:</b> ' + esc(P.industria) : ''}</p>
+  <div class="ver"><b>${esc(v.t)}</b><br>${esc(v.d)}</div>
+  <h2>Parámetros del proyecto</h2><div class="par">${par.map(a => `<div><span>${a[0]}</span><b>${a[1]}</b></div>`).join('')}</div>
+  <h2>Resumen de ${rn ? 'tu inversión y rendimiento' : 'costo y margen'}</h2><table><tbody>${resumen.join('')}</tbody></table>
+  <h2>Rentabilidad por equipo</h2><table><thead><tr>${eqHead}</tr></thead><tbody>${eqRows}</tbody></table>${notas}
+  <h2>Registro de insumos por equipo</h2><p class="s">Costos en USD${P.envioPct > 0 ? ', incluyen ' + pct(P.envioPct, 1) + ' de envío' : ''}. El importe es para todos los equipos de ese modelo en el proyecto.</p>${insumos}
+  <h2>Desglose por áreas</h2><table><thead><tr><th>Área</th><th class="n">L/día</th><th class="n">Días</th><th class="n">L/año</th><th class="n">Gasto actual/año</th><th>Equipos</th><th class="n">Capacidad L/día</th><th class="n">Uso</th><th class="n">Insumos año 1</th><th class="n">kWh/año</th><th class="n">Electricidad/año</th></tr></thead><tbody>${areas}
+  <tr class="tot"><td>Total</td><td class="n">${nf0.format(t.Ld)}</td><td></td><td class="n">${nf0.format(t.Lanio)}</td><td class="n">${mx(t.gastoMXN)}</td><td></td><td></td><td></td><td class="n">${usd(t.ins)}</td><td class="n">${nf0.format(t.kwh)}</td><td class="n">${mx(t.elec)}</td></tr></tbody></table>
+  ${prom}
+  <h2>Proyección anual (MXN)</h2><h3>Cliente</h3><table><thead><tr><th>Año</th><th class="n">Gasto actual</th><th class="n">${rn ? 'Renta' : 'Insumos'}</th><th class="n">Electricidad</th><th class="n">Ahorro neto</th><th class="n">Acumulado</th></tr></thead><tbody>${flowC}</tbody></table>
+  ${rn ? `<h3>Proveedor</h3><table><thead><tr><th>Año</th><th class="n">Ingreso por renta</th><th class="n">Insumos, visitas y servicio</th><th class="n">Neto</th><th class="n">Valor residual</th><th class="n">Acumulado</th></tr></thead><tbody>${flowS}</tbody></table>` : ''}
+  </body></html>`;
+}
+
+function clientReportHTML() {
+  const o = R, rn = o.renta, m = o.prom;
+  const per = UI.per, lab = perLab(), d = repData(per), eP = ecoData(per), hasG = d.groups.length > 1, tr = (a, b, c) => `<tr class="${c || ''}"><td>${a}</td><td class="n">${b}</td></tr>`;
+  const wRow = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.gar)}</td><td class="n">${nf2f.format(r.bot)}</td><td class="n">${nf2f.format(r.L)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${mxn2(r.gasto)}</td></tr>`;
+  const wSub = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${nf2f.format(r.gar)}</td><td class="n">${nf2f.format(r.bot)}</td><td class="n">${nf2f.format(r.L)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${mxn2(r.gasto)}</td></tr>`;
+  const fRow = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${nf2f.format(r.feed / 1000)}</td><td class="n">${nf2f.format(r.rej / 1000)}</td><td class="n">${r.L > 0 ? nf2f.format(r.feed / r.L) : '—'}</td></tr>`;
+  const fSub = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${nf2f.format(r.L / 1000)}</td><td class="n">${nf2f.format(r.feed / 1000)}</td><td class="n">${nf2f.format(r.rej / 1000)}</td><td class="n">${r.L > 0 ? nf2f.format(r.feed / r.L) : '—'}</td></tr>`;
+  const eRow = r => `<tr><td>${esc(r.n)}</td><td>${esc(r.cat)}</td><td class="n">${r.qty}</td><td class="n">${nf2f.format(r.kwh)}</td><td class="n">${mxn2(r.elec)}</td></tr>`;
+  const eSub = (n, r, c) => `<tr class="${c}"><td colspan="2">${esc(n)}</td><td class="n">${r.qty}</td><td class="n">${nf2f.format(r.kwh)}</td><td class="n">${mxn2(r.elec)}</td></tr>`;
+  const tbl = (rowFn, subFn) => d.groups.map(g => g.rows.map(rowFn).join('') + (hasG ? subFn('Subtotal ' + g.cat, g.sum, 'subt') : '')).join('') + subFn('Total', d.all, 'tot');
+  const agua = tbl(wRow, wSub), feed = tbl(fRow, fSub), elec = tbl(eRow, eSub);
+  const ahorro = m && m.gM > 0 ? `<h2>Ahorro mensual del proyecto</h2><table><tbody>
+    ${tr('Gasto mensual actual en agua embotellada', mx2(m.gM))}
+    ${tr(rn ? 'Renta mensual de los equipos (incluye insumos y servicio)' : 'Insumos y servicio, promedio mensual', mx2(rn ? m.pagoM : m.insM))}
+    ${tr('Electricidad de los equipos, promedio mensual', mx2(m.elecM))}
+    ${tr('Gasto mensual con el proyecto', mx2(m.operM), 'subt')}
+    ${tr('Ahorro mensual', mx2(m.ahorroOper) + ' · ' + pct2(m.margenOper), 'tot')}
+    ${m.amortM > 0 ? tr(rn ? 'Instalación repartida en ' + o.N + ' años' : 'Inversión repartida en ' + o.N + ' años', mx2(m.amortM)) + tr('Ahorro mensual después de recuperar la inversión', mx2(m.ahorroNeto) + ' · ' + pct2(m.margenNeto), 'tot') : ''}
+    ${tr('Ahorro anual' + (m.amortM > 0 ? ' (después de la inversión)' : ''), mx2((m.amortM > 0 ? m.ahorroNeto : m.ahorroOper) * 12))}
+    ${m.cplAct != null ? tr('Costo por litro: antes → con el proyecto', `$ ${nf2f.format(m.cplAct)} → $ ${nf2f.format((m.amortM > 0 ? m.costoM : m.operM) / m.lM)}`) : ''}</tbody></table>
+    <p class="s">Estimación sin IVA basada en el gasto y los consumos capturados con el cliente. Los resultados reales pueden variar.</p>` : '';
+  const a = eP.all;
+  const kp = (l, v) => `<div class="k"><span>${l}</span><b>${v}</b></div>`;
+  const resumen = `<div class="ks">${m && m.gM > 0 ? kp('Ahorro mensual', mx2(m.amortM > 0 ? m.ahorroNeto : m.ahorroOper)) + kp('Ahorro vs. gasto actual', pct2(m.amortM > 0 ? m.margenNeto : m.margenOper)) : ''}${kp('Agua purificada ' + lab, nf2f.format(d.all.L / 1000) + ' m³')}${kp('Plástico PET evitado ' + lab, nf2f.format(a.pet) + ' kg')}${kp('Reducción de huella ' + lab, nf2f.format(a.red) + ' kg CO₂e')}</div>`;
+  const ecoTbl = d => ecoHTML(d).replace('<table class="t">', '<table class="t" style="table-layout:auto">');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reporte de consumo e impacto ${esc(P.cliente)} (${lab})</title><style>
+  body{font:13px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#53555A;max-width:1000px;margin:0 auto;padding:30px 20px}
+  h1{font-size:22px;margin:0}h2{font-size:15px;margin:28px 0 8px;color:#0B7F87}.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #0B7F87;padding-bottom:12px;margin-bottom:16px}
+  table{border-collapse:collapse;width:100%;margin-bottom:6px}th,td{padding:7px 9px;border-bottom:1px solid #DCDEE0;text-align:left;vertical-align:top}th{font-size:11px;color:#6B6D72;background:#EEF9FA}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tot td{font-weight:700;border-top:2px solid #53555A}.subt td{font-weight:600;background:#F7FBFB}.sub td{font-weight:600;background:#F7FBFB}.s{color:#6B6D72;font-size:12px}
+  .t th,.t td{font-size:11.5px;white-space:normal}.ks{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.k{background:#EEF9FA;border-radius:10px;padding:12px 14px}.k span{display:block;font-size:11px;color:#6B6D72}.k b{font-size:19px;color:#0B7F87}
+  @media print{body{padding:0}h2{break-after:avoid}tr{break-inside:avoid}}
+  </style></head><body><div class="top"><div><img src="${LOGO}" alt="Purifika" style="height:60px;display:block;margin-bottom:6px"><h1>Reporte de consumo e impacto</h1><div class="s"><b>Periodo: ${per === 'dia' ? 'diario' : per === 'mes' ? 'mensual' : 'anual'}</b></div><div class="s">${esc(P.emisor || 'Purifika')}</div></div>
+  <div class="s" style="text-align:right">${P.folio ? 'Folio: ' + esc(P.folio) + '<br>' : ''}Fecha: ${esc(P.fecha)}</div></div>
+  <p><b>Cliente:</b> ${esc(P.cliente || '—')}${P.ubicacion ? '<br><b>Ubicación:</b> ' + esc(P.ubicacion) : ''}</p>
+  ${resumen}${ahorro}
+  <h2>Consumo reportado por el cliente ${lab}</h2>${refHTML(per).replace('<div class="tw"><table class="t">', '<table>').replace('</tbody></table></div>', '</tbody></table>')}
+  <h2>Consumo de agua ${lab}</h2><table><thead><tr><th>Área</th><th>Categoría</th><th class="n">Garrafones</th><th class="n">Botellas</th><th class="n">Litros</th><th class="n">m³</th><th class="n">Gasto actual MXN</th></tr></thead><tbody>${agua}</tbody></table>
+  <h2>Agua de alimentación de los purificadores ${lab}</h2><table><thead><tr><th>Área</th><th>Categoría</th><th class="n">Producida m³</th><th class="n">Alimentación m³</th><th class="n">Rechazo m³</th><th class="n">m³ por m³ producido</th></tr></thead><tbody>${feed}</tbody></table>
+  <p class="s">El agua de alimentación es la que consumen los equipos de ósmosis inversa para producir el agua purificada; el rechazo es la parte que se descarta.</p>
+  <h2>Consumo eléctrico de los equipos ${lab}</h2><table><thead><tr><th>Área</th><th>Categoría</th><th class="n">Equipos</th><th class="n">kWh</th><th class="n">Costo MXN</th></tr></thead><tbody>${elec}</tbody></table>
+  <h2>Impacto ambiental ${lab}</h2>${eP.rows.length ? ecoTbl(eP) : ''}
+  <p class="s">${esc(ecoNota())}${a.red > 0 ? ' La reducción equivale a unos ' + nf2f.format(a.km) + ' km recorridos en un auto promedio.' : ''}</p>
+  <h2>Cómo se calcula cada consumo</h2>${methodHTML(rn)}
+  <p class="s">Los valores usados son los capturados con el cliente y pueden ajustarse. Los factores de impacto ambiental son de referencia.</p>
+  </body></html>`;
+}
+
 function resumenTxt() {
   const o = R;
   if (o.renta) return [`${P.emisor || 'Cotización'} · ${P.cliente || 'Proyecto'} (renta)`, `Renta mensual: ${mx(o.rentaMes)}${P.ivaOn ? ' · Total con IVA: ' + mx(o.totalM) : ''}`,
     `Ahorro estimado año 1: ${mx(o.ahorro1 * P.tc)} (${o.ahorroPct == null ? '—' : nf0.format(o.ahorroPct)} % del gasto actual)`].join('\n');
   return [`${P.emisor || 'Cotización'} · ${P.cliente || 'Proyecto'}`, `Subtotal: ${usd(o.precio)}${P.ivaOn ? ' · Total con IVA: ' + usd(o.total) : ''}`,
-    `Ahorro año 1: ${usd(o.ahorro1)} · Recuperación: ${o.payback == null ? '> ' + P.horizonte + ' años' : nf1.format(o.payback) + ' años'}`,
-    `ROI ${P.horizonte} años: ${pct(o.roi, 0)} · VAN: ${usd(o.van)} · TIR: ${tirTxtOf(o.tir)}`].join('\n');
+    `Ahorro año 1: ${mx(o.ahorro1 * P.tc)} · Recuperación: ${o.payback == null ? '> ' + P.horizonte + ' años' : nf1.format(o.payback) + ' años'}`,
+    `ROI ${P.horizonte} años: ${pct(o.roi, 0)} · VAN: ${mx(o.van * P.tc)} · TIR: ${tirTxtOf(o.tir)}`].join('\n');
 }
 
 /* ---------- acciones ---------- */
@@ -1232,7 +1570,7 @@ function parseRows(txt) {
     if (isNaN(parseFloat(c[2].replace(/[$,]/g, '')))) continue;
     const n = i => num((c[i] || '0').replace(/[$,]/g, ''));
     const tipo = TIPOS.find(t => t.toLowerCase() === (c[1] || '').toLowerCase()) || 'Otro';
-    out.push({ id: 'eq_' + uid(), parte: '', nombre: c[0], tipo: c[1] || 'Otro', precio: n(2), costo: n(3), w: n(4), h: n(5) || 24, cap: n(6), insF: n(7), insV: n(8), r1: 0, nota: '' });
+    out.push({ id: 'eq_' + uid(), parte: '', nombre: c[0], tipo: c[1] || 'Otro', precio: n(2), costo: n(3), w: n(4), h: n(5) || 24, lph: n(6), hProd: 0, insF: n(7), insV: n(8), r1: 0, nota: '' });
   }
   return out;
 }
@@ -1240,17 +1578,33 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-act], .tab'); if (!t) return;
   if (t.classList.contains('tab')) { UI.tab = t.dataset.v; render(); window.scrollTo(0, 0); return; }
   const act = t.dataset.act, id = t.dataset.id;
-  if (act === 'addArea') { P.areas.push({ id: uid(), nombre: t.dataset.cat === 'Habitaciones' ? 'Habitaciones' : '', cat: t.dataset.cat, gar: 0, bot: 0, lit: 0, dias: 0, lineas: [] }); touch(); render(); }
+  if (act === 'addCat') { const n = String(UI.u.newCat || '').trim(); if (!n) { toast('Escribe el nombre de la categoría.'); return; } if (P.cats.some(c => c.toLowerCase() === n.toLowerCase())) { toast('Esa categoría ya existe.'); return; } P.cats.push(n); UI.u.newCat = ''; touch(); render(); }
+  else if (act === 'delCat') { if (P.cats.length <= 1) { toast('Debe quedar al menos una categoría.'); return; } P.cats.splice(+t.dataset.i, 1); touch(); render(); }
+  else if (act === 'resetCats') { P.cats = CATS.slice(); touch(); render(); }
+  else if (act === 'addArea') { P.areas.push({ id: uid(), nombre: t.dataset.cat === 'Habitaciones' ? 'Habitaciones' : '', cat: t.dataset.cat, gar: 0, bot: 0, lit: 0, dias: 0, lineas: [] }); touch(); render(); }
   else if (act === 'delArea') confirmable(t, () => { P.areas = P.areas.filter(a => a.id !== id); touch(); render(); });
   else if (act === 'addLine') { const a = P.areas.find(a => a.id === id); if (!S.catalog.length) { toast('Primero agrega equipos en la lista de precios.'); return; } a.lineas.push({ eq: S.catalog[0].id, qty: 1 }); touch(); render(); }
   else if (act === 'delLine') { const a = P.areas.find(a => a.id === id); a.lineas.splice(+t.dataset.i, 1); touch(); render(); }
   else if (act === 'saveLine') {
     const a = P.areas.find(a => a.id === id), d = draftOf(id);
     if (!d.eq) { toast('Primero selecciona un equipo.'); return; }
+    const ce = S.catalog.find(c => c.id === d.eq); const sinC = ce && !(ce.costo > 0);
     const q = Math.max(1, Math.round(num(d.qty) || 1)), ex = a.lineas.find(l => l.eq === d.eq);
     if (ex) ex.qty += q; else a.lineas.push({ eq: d.eq, qty: q });
     if (!S.kits[d.eq]) { S.kits[d.eq] = []; touch('cat'); }
-    d.eq = ''; d.qty = 1; touch(); render(); toast('Equipo guardado en el área');
+    d.eq = ''; d.qty = 1; touch(); render(); toast(sinC ? 'Guardado, pero ' + (ce.parte || ce.nombre) + ' no tiene costo de compra: captúralo en el aviso rojo.' : 'Equipo guardado en el área');
+  }
+  else if (act === 'pickIns') { insDraft(id).parte = t.dataset.p; const inp = document.querySelector('[data-b="q:' + id + ':parte"]'); if (inp) inp.value = t.dataset.p; setO('ir-' + id, ''); toast('Elegido ' + t.dataset.p + '. Ajusta la cantidad y pulsa Guardar'); }
+  else if (act === 'importIns') {
+    const have = insIdx(); let n = 0;
+    String(UI.u.imp || '').split(/\r?\n/).forEach(l => {
+      const d = l.includes('\t') ? '\t' : l.includes(';') ? ';' : ',', c = l.split(d).map(x => x.trim().replace(/^"|"$/g, ''));
+      if (c.length < 4 || !c[0] || have[c[0].toLowerCase()]) return;
+      const cost = num(c[c.length - 1].replace(/[$\s]/g, '')); if (!(cost >= 0) || isNaN(parseFloat(c[c.length - 1].replace(/[$\s]/g, '')))) return;
+      S.insCat.push({ p: c[0], t: c[1] || 'Otro', d: c.slice(2, c.length - 1).join(' '), c: cost }); have[c[0].toLowerCase()] = 1; n++;
+    });
+    if (!n) { toast('No encontré filas válidas. Usa 4 columnas: parte, tipo, descripción, costo.'); return; }
+    UI.u.imp = ''; touch('ins'); render(); toast(n + ' insumos importados');
   }
   else if (act === 'addKit') { const k = UI.u.kit; if (!k) { toast('Selecciona un modelo.'); return; } S.kits[k] = S.kits[k] || []; UI.openKits[k] = true; UI.u.kit = ''; touch('cat'); render(); }
   else if (act === 'addKit1') {
@@ -1258,9 +1612,9 @@ document.addEventListener('click', e => {
     if (!x) { toast('No encontré ese No. de parte en el catálogo de insumos.'); return; }
     const kit = S.kits[id] = S.kits[id] || [], ex = kit.find(k => String(k.parte).toLowerCase() === x.p.toLowerCase()), q = num(d.qty) > 0 ? num(d.qty) : 1;
     if (ex) ex.qty = num(ex.qty) + q; else kit.push({ parte: x.p, qty: q });
-    d.parte = ''; d.qty = 1; UI.openKits[id] = true; touch('cat'); render();
+    d.parte = ''; d.qty = 1; UI.openKits[id] = true; touch('cat'); render(); if (!(x.c > 0)) toast('Alerta: ' + x.p + ' tiene costo $0. Captúralo en el aviso rojo.');
   }
-  else if (act === 'addSug') { const kit = S.kits[id] = S.kits[id] || []; kit.push({ parte: t.dataset.p, qty: 1 }); UI.openKits[id] = true; touch('cat'); render(); }
+  else if (act === 'addSug') { const kit = S.kits[id] = S.kits[id] || []; kit.push({ parte: t.dataset.p, qty: 1 }); UI.openKits[id] = true; touch('cat'); render(); const xx = insIdx()[String(t.dataset.p).toLowerCase()]; if (xx && !(xx.c > 0)) toast('Alerta: ' + xx.p + ' tiene costo $0. Captúralo en el aviso rojo.'); }
   else if (act === 'delKit') { S.kits[id].splice(+t.dataset.i, 1); UI.openKits[id] = true; touch('cat'); render(); }
   else if (act === 'toggleInsCat') { UI.insCatOpen = !UI.insCatOpen; render(); }
   else if (act === 'addInsumo') {
@@ -1275,27 +1629,43 @@ document.addEventListener('click', e => {
   else if (act === 'dupProjId') { const src = S.projects.find(p => p.id === id); if (src) { const p = JSON.parse(JSON.stringify(src)); p.id = uid(); p.mod = Date.now(); p.demo = false; p.cliente = (src.cliente || 'Proyecto') + ' (copia)'; p.areas.forEach(a => { a.id = uid(); }); S.projects.push(p); dirty.add(p.id); touch(); render(); toast('Proyecto duplicado'); } }
   else if (act === 'delProjId') confirmable(t, () => { const gone = id; S.projects = S.projects.filter(p => p.id !== gone); if (!S.projects.length) S.projects.push(blankProject(P)); if (P.id === gone) { P = S.projects[0]; S.active = P.id; } (S.delQ = S.delQ || []).push(gone); touch(); render(); });
   else if (act === 'goTab') { UI.tab = t.dataset.v; render(); window.scrollTo(0, 0); }
-  else if (act === 'pend') { UI.soloPend = t.dataset.v === '1'; render(); }
+  else if (act === 'listF') { UI.listF = t.dataset.v; render(); }
+  else if (act === 'pend') { UI.bibF = t.dataset.v; render(); }
+  else if (act === 'saveBib') {
+    /* lee también lo que está escrito en pantalla, por si algún teclado no avisó el cambio */
+    document.querySelectorAll('input[data-b^="b:"]').forEach(el => {
+      const x = el.dataset.b.split(':'), c = S.catalog.find(c => c.id === x[1]); if (!c) return;
+      const v = x[2] === 'nota' ? el.value : (el.value === '' ? 0 : num(el.value)), cur = c[x[2]] == null ? (x[2] === 'nota' ? '' : 0) : c[x[2]];
+      if (v !== cur) (UI.bibDraft[x[1]] = UI.bibDraft[x[1]] || {})[x[2]] = v;
+    });
+    const ids = Object.keys(UI.bibDraft).filter(i => Object.keys(UI.bibDraft[i]).length);
+    if (!ids.length) { toast('No detecté cambios. Escribe la potencia (W) de un equipo y vuelve a pulsar Guardar cambios.'); return; }
+    ids.forEach(i => { const ix = S.catalog.findIndex(c => c.id === i); if (ix >= 0) S.catalog[ix] = Object.assign({}, S.catalog[ix], UI.bibDraft[i]); });
+    UI.bibDraft = {}; touch('cat'); render(); toast('Biblioteca guardada: ' + ids.length + (ids.length === 1 ? ' equipo' : ' equipos'));
+  }
   else if (act === 'saveEq') {
     const n = UI.nuevo;
     if (!n.nombre.trim()) { toast('Escribe la descripción del equipo.'); return; }
     const parte = n.parte.trim();
     if (parte && S.catalog.some(c => (c.parte || '').toLowerCase() === parte.toLowerCase())) { toast('Ya existe un equipo con ese No. de parte.'); return; }
     const fx = n.mon === 'MXN' ? 1 / (P.tc || 1) : 1, id = 'eq_' + uid();
-    S.catalog.unshift({ id, parte, nombre: n.nombre.trim(), tipo: n.tipo.trim() || 'Otro', precio: n.precio * fx, costo: n.costo * fx, w: n.w, h: n.h || 24, cap: n.lph * 12, insF: n.insF * fx, insV: n.insV, r1: n.r1, nota: '' });
+    S.catalog.unshift({ id, parte, nombre: n.nombre.trim(), tipo: n.tipo.trim() || 'Otro', precio: n.precio * fx, costo: n.costo * fx, w: n.w, h: n.h || 24, lph: n.lph, hProd: n.hProd || 0, insF: n.insF * fx, insV: n.insV, r1: n.r1, nota: '' });
     S.kits[id] = [];
-    resetNuevo(); touch('cat'); render(); window.scrollTo(0, 0); toast('Equipo guardado en la lista');
+    if (!(n.costo > 0)) setTimeout(() => toast('Guardado sin costo de compra ($0): captúralo para que cuente en la rentabilidad.'), 50);
+    UI.listF = 'all'; resetNuevo(); touch('cat'); render(); window.scrollTo(0, 0); toast('Equipo guardado en la lista');
   }
-  else if (act === 'addEq') { S.catalog.push({ id: 'eq_' + uid(), parte: '', nombre: 'Nuevo equipo', tipo: 'Otro', precio: 0, costo: 0, w: 0, h: 24, cap: 0, insF: 0, insV: 0, r1: 0 }); touch('cat'); render(); }
+  else if (act === 'addEq') { S.catalog.push({ id: 'eq_' + uid(), parte: '', nombre: 'Nuevo equipo', tipo: 'Otro', precio: 0, costo: 0, w: 0, h: 24, lph: 0, hProd: 0, insF: 0, insV: 0, r1: 0 }); touch('cat'); render(); }
   else if (act === 'delEq') confirmable(t, () => { S.catalog = S.catalog.filter(c => c.id !== id); delete S.kits[id]; S.projects.forEach(p => { p.areas.forEach(a => { a.lineas = a.lineas.filter(l => l.eq !== id); }); dirty.add(p.id); }); touch('cat'); render(); });
   else if (act === 'importCat') { const rows = parseRows($('#impTxt').value); if (!rows.length) { toast('No encontré filas válidas. Revisa el orden de las columnas.'); return; } S.catalog.push(...rows); touch('cat'); render(); toast(rows.length + ' equipos importados'); }
   else if (act === 'per') { UI.per = t.dataset.v; render(); }
   else if (act === 'dlBackup') saveBackup();
   else if (act === 'dlOffline') { fetch('cotizador-offline.html').then(r => { if (!r.ok) throw 0; return r.text(); }).then(txt => saveFile('cotizador-purifika-offline.html', txt)).catch(() => toast('No se pudo preparar el archivo sin conexión.')); }
+  else if (act === 'dlAnalisis') saveFile('analisis-rentabilidad-' + slug(P.cliente) + '.html', analysisHTML());
+  else if (act === 'dlCliente') saveFile('reporte-cliente-' + slug(P.cliente) + '-' + ({ dia: 'diario', mes: 'mensual', anio: 'anual' }[UI.per] || 'anual') + '.html', clientReportHTML());
   else if (act === 'dlQuote') saveFile('cotizacion-' + slug(P.cliente) + '.html', quoteHTML());
   else if (act === 'copyRes') { const txt = resumenTxt(); (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Resumen copiado'), () => { toast('No se pudo copiar. Selecciona el texto manualmente.'); }); }
-  else if (act === 'csvAgua') { const d = repData(); saveFile('consumo-agua-' + slug(P.cliente) + '.csv', csv([['Área', 'Categoría', 'Garrafones', 'Botellas', 'Litros', 'm3', 'Gasto actual MXN', 'Periodo']].concat(d.rows.map(r => [r.n, r.cat, r.gar.toFixed(1), r.bot.toFixed(1), r.L.toFixed(0), (r.L / 1000).toFixed(2), r.gasto.toFixed(0), perLab()])))); }
-  else if (act === 'csvElec') { const d = repData(); saveFile('consumo-electrico-' + slug(P.cliente) + '.csv', csv([['Área', 'Equipos', 'kWh', 'Costo MXN', 'Costo USD', 'Periodo']].concat(d.rows.map(r => [r.n, r.qty, r.kwh.toFixed(1), r.elec.toFixed(0), (r.elec / P.tc).toFixed(2), perLab()])))); }
+  else if (act === 'csvAgua') { const d = repData(); saveFile('consumo-agua-' + slug(P.cliente) + '.csv', csv([['Área', 'Categoría', 'Garrafones', 'Botellas', 'Litros', 'm3', 'Alimentación m3', 'Rechazo m3', 'Gasto actual MXN', 'Periodo']].concat(d.rows.map(r => [r.n, r.cat, r.gar.toFixed(2), r.bot.toFixed(2), r.L.toFixed(2), (r.L / 1000).toFixed(2), (r.feed / 1000).toFixed(2), (r.rej / 1000).toFixed(2), r.gasto.toFixed(2), perLab()])))); }
+  else if (act === 'csvElec') { const d = repData(); saveFile('consumo-electrico-' + slug(P.cliente) + '.csv', csv([['Área', 'Categoría', 'Equipos', 'kWh', 'Costo MXN', 'Costo USD', 'Periodo']].concat(d.rows.map(r => [r.n, r.cat, r.qty, r.kwh.toFixed(2), r.elec.toFixed(2), (r.elec / P.tc).toFixed(2), perLab()])))); }
   else if (act === 'newProj') { const p = blankProject(P); p.cliente = 'Proyecto nuevo'; if (UI.fInd !== '*' && UI.fInd !== 'Sin clasificar') p.industria = UI.fInd; S.projects.push(p); P = p; S.active = p.id; dirty.add(p.id); touch(); UI.tab = 'proyecto'; render(); }
   else if (act === 'dupProj') { const p = JSON.parse(JSON.stringify(P)); p.id = uid(); p.mod = Date.now(); p.demo = false; p.cliente = (P.cliente || 'Proyecto') + ' (copia)'; p.areas.forEach(a => { a.id = uid(); }); S.projects.push(p); P = p; S.active = p.id; dirty.add(p.id); touch(); render(); }
   else if (act === 'delProj') confirmable(t, () => { const gone = P.id; S.projects = S.projects.filter(p => p.id !== gone); if (!S.projects.length) S.projects.push(blankProject(P)); P = S.projects[0]; S.active = P.id; (S.delQ = S.delQ || []).push(gone); touch(); render(); });
@@ -1303,10 +1673,13 @@ document.addEventListener('click', e => {
 function onBind(el) {
   const r = resolve(el.dataset.b); if (!r || !r.o) return;
   let v;
-  if (el.type === 'checkbox') v = el.checked; else if (el.type === 'number') v = el.value === '' ? 0 : num(el.value); else v = el.value;
+  if (el.type === 'checkbox') v = el.checked; else if (el.type === 'number' || el.dataset.num) v = el.value === '' ? 0 : num(el.value); else v = el.value;
   const bk = el.dataset.b;
   if (bk.startsWith('v:') && el.value === '') delete r.o[r.k]; else r.o[r.k] = v;
   if (bk === 'n:mon') { render(); return; }
+  if (bk.startsWith('b:')) { paintBib(); return; }
+  if (/^s:.*:eq$/.test(bk)) { render(); return; }
+  if (/^q:.*:parte$/.test(bk)) showIns(bk.split(':')[1], el.value);
   if (/^[nsuq]:/.test(bk)) return;
   if (!bk.startsWith('d:') && !bk.startsWith('v:')) document.querySelectorAll('[data-b="' + bk + '"]').forEach(x => { if (x !== el) x.value = el.value; });
   if (bk.startsWith('d:')) document.querySelectorAll('[data-b="' + bk + '"]').forEach(x => { if (x !== el) x.value = el.value; });
@@ -1320,9 +1693,12 @@ document.addEventListener('input', e => {
   if (e.target.id === 'catQ') { const q = e.target.value.toLowerCase().trim(); document.querySelectorAll('tr[data-q]').forEach(tr => { tr.hidden = q && !tr.dataset.q.includes(q); }); return; }
   const el = e.target.closest('[data-b]'); if (el) onBind(el);
 });
+document.addEventListener('focusin', e => { const el = e.target; if (el && el.tagName === 'INPUT' && (el.type === 'number' || el.dataset.num) && (el.value === '0' || el.value === '0.0')) { try { el.select(); } catch (x) { } } });
 document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.kit) UI.openKits[d.dataset.kit] = d.open; }, true);
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.closest && el.closest('.alertbox') && el.dataset.b) { render(); return; }
+  if (el.dataset && /^i:\d+:c$/.test(el.dataset.b || '') && UI.tab === 'ins') { render(); return; }
   if (el.id === 'projSel') { P = S.projects.find(p => p.id === el.value) || P; S.active = P.id; touch(); render(); return; }
   if (el.id === 'bkMerge' && el.files[0]) {
     const fr = new FileReader();
@@ -1332,7 +1708,7 @@ document.addEventListener('change', e => {
   }
   if (el.id === 'bkFile' && el.files[0]) {
     const fr = new FileReader();
-    fr.onload = () => { try { const s = JSON.parse(fr.result); if (!s.projects || !s.catalog) throw 0; s.rev = Date.now(); initState(s); S.projects.forEach(p => dirty.add(p.id)); catDirty = true; insDirty = true; touch(); render(); toast('Respaldo restaurado'); } catch (x) { toast('El archivo no es un respaldo válido.'); } };
+    fr.onload = () => { try { const s = JSON.parse(fr.result); if (!s.projects || !s.catalog) throw 0; s.rev = Date.now(); if (!Array.isArray(s.insCat) || !s.insCat.length) s.insCat = S.insCat; if (!s.kits) s.kits = S.kits; initState(s); S.projects.forEach(p => dirty.add(p.id)); catDirty = true; insDirty = true; touch(); render(); toast('Respaldo restaurado'); } catch (x) { toast('El archivo no es un respaldo válido.'); } };
     fr.readAsText(el.files[0]);
   }
 });
