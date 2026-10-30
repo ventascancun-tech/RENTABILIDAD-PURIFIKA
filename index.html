@@ -2430,6 +2430,7 @@ document.addEventListener('click', e => {
   else if (act === 'csvAgua') { const d = repData(); saveFile(fname('Consumo-de-agua', 'csv'), csv([['Área', 'Categoría', 'Garrafones', 'Botellas', 'Litros', 'm3', 'Alimentación m3', 'Rechazo m3', 'Gasto actual MXN', 'Periodo']].concat(d.rows.map(r => [r.n, r.cat, r.gar.toFixed(2), r.bot.toFixed(2), r.L.toFixed(2), (r.L / 1000).toFixed(2), (r.feed / 1000).toFixed(2), (r.rej / 1000).toFixed(2), r.gasto.toFixed(2), perLab()])))); }
   else if (act === 'csvElec') { const d = repData(); saveFile(fname('Consumo-electrico', 'csv'), csv([['Área', 'Categoría', 'Equipos', 'kWh', 'Costo MXN', 'Costo USD', 'Periodo']].concat(d.rows.map(r => [r.n, r.cat, r.qty, r.kwh.toFixed(2), r.elec.toFixed(2), (r.elec / P.tc).toFixed(2), perLab()])))); }
   else if (act === 'newProj') { UI.pick = true; render(); }
+  else if (act === 'instalar') { const e = UI.inst; if (!e) { toast('Abre el cotizador en Chrome o Edge desde su dirección web (https) y usa el menú ⋮ → Guardar y compartir → Instalar.'); return; } e.prompt(); e.userChoice.then(() => { UI.inst = null; const b = document.getElementById('instBtn'); if (b) b.hidden = true; }).catch(() => { }); }
   else if (act === 'userOpen') { UI.userDlg = true; render(); }
   else if (act === 'userClose') { UI.userDlg = false; render(); }
   else if (act === 'newProjCancel') { UI.pick = false; render(); }
@@ -2698,11 +2699,13 @@ function init() {
     <div class="row"><div class="brand"><img class="logo" src="${LOGO}" alt="Purifika"><small>Cotizador · análisis de ahorro y rentabilidad</small></div>
       <select id="projSel" aria-label="Proyecto"></select>
       <button class="btn sm" data-act="newProj">Nuevo</button><button class="btn sm" data-act="dupProj">Duplicar</button><button class="btn sm danger" data-act="delProj">Eliminar</button>
-      <span id="syncChip" class="chip"></span><button class="btn sm" data-act="dlBackup" data-needdl>Respaldo</button><button class="btn sm" data-act="userOpen">Usuario</button></div>
+      <span id="syncChip" class="chip"></span><button class="btn sm" data-act="dlBackup" data-needdl>Respaldo</button><button class="btn sm" data-act="userOpen">Usuario</button><button class="btn sm primary" id="instBtn" data-act="instalar" hidden>Instalar como app</button></div>
     <div class="tabs" role="tablist"></div>
   </div></div>
   <div class="in"><main><div class="strip" id="strip"></div><div id="main"></div></main></div>
   <div id="toast" role="status" hidden></div>`;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); UI.inst = e; const b = document.getElementById('instBtn'); if (b) b.hidden = false; });
+  window.addEventListener('appinstalled', () => { UI.inst = null; const b = document.getElementById('instBtn'); if (b) b.hidden = true; toast('App instalada. Búscala en el menú de inicio.'); });
   UI.sync = STANDALONE ? 'local' : (navigator.onLine ? 'pend' : 'off');
   render();
   loadRemote();
