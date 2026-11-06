@@ -2011,7 +2011,11 @@ async function pdfFromHtml(html) {
       if (head) { st.fontStyle = 'bold'; st.fillColor = [238, 249, 250]; st.textColor = GRAY; }
       if (/tot/.test(rowCls)) { st.fontStyle = 'bold'; st.lineWidth = { top: 0.5, bottom: 0.1, left: 0, right: 0 }; st.lineColor = INK; }
       if (/sub/.test(rowCls) || /grp/.test(rowCls)) { st.fontStyle = 'bold'; st.fillColor = [247, 251, 251]; }
-      return { content: pdfTxt(c.textContent).trim(), colSpan: +c.getAttribute('colspan') || 1, styles: st };
+      if (/\bgrp\b/.test(rowCls)) { st.fillColor = [11, 127, 135]; st.textColor = [255, 255, 255]; st.fontStyle = 'bold'; }
+      if (/\bsubt\b/.test(rowCls)) { st.fillColor = [236, 238, 239]; st.fontStyle = 'bold'; st.lineWidth = { top: 0.5, bottom: 0, left: 0, right: 0 }; st.lineColor = INK; }
+      if (/\bsp\b/.test(rowCls)) { st.fillColor = [255, 255, 255]; st.minCellHeight = 1.5; st.cellPadding = 0.4; st.lineWidth = 0; }
+      let txt = pdfTxt(c.textContent).trim(); if (c.classList.contains('n')) txt = txt.replace(/ /g, '\u00A0');
+      return { content: txt, colSpan: +c.getAttribute('colspan') || 1, styles: st };
     };
     const head = [...el.querySelectorAll('thead tr')].map(r => [...r.children].map(c => toCell(c, true, '')));
     const body = [...el.querySelectorAll('tbody tr')].map(r => [...r.children].map(c => toCell(c, false, r.className || '')));
@@ -2145,9 +2149,9 @@ const slug = s => (s || 'proyecto').toLowerCase().normalize('NFD').replace(/[̀-
 function quoteHTML() {
   const o = R, rn = o.renta, tc = P.tc;
   const money = rn ? mx : usd;
-  const rows = o.byArea.map(b => `<tr class="grp"><td colspan="5">Ubicación: ${esc(b.a.nombre || 'Sin nombre')}</td></tr>` +
+  const rows = o.byArea.map(b => `<tr class="grp"><td colspan="5">${esc((b.a.nombre || 'Sin nombre').toUpperCase())}</td></tr>` +
     b.rows.map(r => `<tr><td>${esc(eqName(r.e))}</td><td class="n">${r.qty}</td><td class="n">${money(r.unit)}</td><td class="n">${r.d ? nf1.format(r.d) + ' %' : '—'}</td><td class="n">${money(r.final)}</td></tr>`).join('') +
-    `<tr class="subt"><td colspan="4">Subtotal ${esc(b.a.nombre || 'Sin nombre')}</td><td class="n">${money(b.rows.reduce((s, r) => s + r.final, 0))}</td></tr>`).join('');
+    `<tr class="subt"><td colspan="4">Subtotal ${esc(b.a.nombre || 'Sin nombre')}</td><td class="n">${money(b.rows.reduce((s, r) => s + r.final, 0))}</td></tr><tr class="sp"><td colspan="5"></td></tr>`).join('');
   let ahorro = '';
   const gastoMes = o.t.gastoMXN / 12, costoMes = rn ? (P.ivaOn ? o.totalM : o.rentaMes) + o.flows[0].elec * tc / 12 : 0, ahorroMes = gastoMes - costoMes, ahorroMesPct = gastoMes > 0 ? ahorroMes / gastoMes * 100 : null;
   if (P.qAhorro && o.hasEq) {
@@ -2181,7 +2185,7 @@ function quoteHTML() {
   body{font:14px/1.5 'ITC Avant Garde Gothic Std',system-ui,-apple-system,'Segoe UI',sans-serif;color:#53555A;max-width:820px;margin:0 auto;padding:32px 20px}
   h1{font-size:22px;margin:0}h2{font-size:15px;margin:28px 0 8px;color:#0B7F87}.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #0B7F87;padding-bottom:12px;margin-bottom:16px}
   table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-bottom:1px solid #DCDEE0;text-align:left}th{font-size:12px;color:#6B6D72;background:#EEF9FA}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .tot td{font-weight:700;border-top:2px solid #53555A}.s{color:#6B6D72;font-size:12px}.grp td{background:#EEF9FA;font-weight:700;color:#0B7F87}.subt td{font-weight:600}
+  .tot td{font-weight:700;border-top:2px solid #53555A}.s{color:#6B6D72;font-size:12px}.grp td{background:#0B7F87;font-weight:700;color:#fff;letter-spacing:.3px;border-bottom:none}.subt td{font-weight:700;background:#ECEEEF;border-top:2px solid #53555A;border-bottom:none;color:#2B2D31}.sp td{border:none;padding:6px 0;background:#fff}
   .notas{font-size:12px;text-align:justify}.notas h3{font-size:13px;color:#0B7F87;margin:14px 0 4px}.notas b.nt{color:#0B7F87}.notas ul{margin:4px 0 8px;padding-left:20px}.notas li{margin:3px 0;text-align:justify}.notas li.l2{margin-left:22px;list-style:circle}.notas li.nb{list-style:none}.notas p{margin:8px 0;text-align:justify}
   </style></head><body>${qHeader()}<div class="top"><div><h1>${esc(P.empresa || P.cliente || 'Cotización')}</h1><div class="s">${rn ? 'Cotización de renta de equipos de purificación de agua' : 'Cotización de equipos de purificación de agua'}</div>${P.folio ? '<div class="s"><b>Folio: ' + esc(P.folio) + '</b></div>' : ''}${P.emisor ? '<div class="s">Emisor: ' + esc(P.emisor) + '</div>' : ''}</div>
   <div class="s" style="text-align:right">${cliImg()}Fecha: ${esc(P.fecha)}</div></div>
@@ -2676,7 +2680,7 @@ function quoteBaseHTML() {
   body{font:14px/1.5 'ITC Avant Garde Gothic Std',system-ui,-apple-system,'Segoe UI',sans-serif;color:#53555A;max-width:820px;margin:0 auto;padding:32px 20px}
   h1{font-size:22px;margin:0}h2{font-size:15px;margin:28px 0 8px;color:#0B7F87}.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid #0B7F87;padding-bottom:12px;margin-bottom:16px}
   table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-bottom:1px solid #DCDEE0;text-align:left}th{font-size:12px;color:#6B6D72;background:#EEF9FA}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .tot td{font-weight:700;border-top:2px solid #53555A}.s{color:#6B6D72;font-size:12px}.grp td{background:#EEF9FA;font-weight:700;color:#0B7F87}.subt td{font-weight:600}
+  .tot td{font-weight:700;border-top:2px solid #53555A}.s{color:#6B6D72;font-size:12px}.grp td{background:#0B7F87;font-weight:700;color:#fff;letter-spacing:.3px;border-bottom:none}.subt td{font-weight:700;background:#ECEEEF;border-top:2px solid #53555A;border-bottom:none;color:#2B2D31}.sp td{border:none;padding:6px 0;background:#fff}
   .notas{font-size:12px;text-align:justify}.notas h3{font-size:13px;color:#0B7F87;margin:14px 0 4px}.notas b.nt{color:#0B7F87}.notas ul{margin:4px 0 8px;padding-left:20px}.notas li{margin:3px 0;text-align:justify}.notas li.l2{margin-left:22px;list-style:circle}.notas li.nb{list-style:none}.notas p{margin:8px 0;text-align:justify}
   </style></head><body>${qHeader()}<div class="top"><div><h1>${esc(P.empresa || P.cliente || 'Cotización')}</h1><div class="s">Cotización de renta de equipos de purificación de agua</div>${P.folio ? '<div class="s"><b>Folio: ' + esc(P.folio) + '</b></div>' : ''}${P.emisor ? '<div class="s">Emisor: ' + esc(P.emisor) + '</div>' : ''}</div>
   <div class="s" style="text-align:right">${cliImg()}Fecha: ${esc(P.fecha)}</div></div>
