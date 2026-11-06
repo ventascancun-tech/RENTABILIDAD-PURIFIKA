@@ -58,6 +58,7 @@ h3{font-size:13px;font-weight:600;margin:0 0 8px;color:var(--ink2);text-transfor
 .fld small{font-size:11px;color:var(--ink2)}
 .inp{position:relative;display:block}
 .inp i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;color:var(--ink2);pointer-events:none}
+select{max-width:100%;min-width:0;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 input,select,textarea{width:100%;min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:16px var(--f-body)}
 input[type=number]{font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums}
 input[type=checkbox]{width:22px;min-height:22px;accent-color:var(--accent)}
@@ -1130,7 +1131,7 @@ function sel(label, bind, opts, o) {
 }
 function chk(label, bind) { return `<label class="chk"><input type="checkbox" data-b="${bind}"${readBind(bind) ? ' checked' : ''}> ${esc(label)}</label>`; }
 const eqName = e => (e.parte ? e.parte + ' · ' : '') + e.nombre + (esAcc(e) ? ' (accesorio)' : '');
-function eqOptions() { const rn = P.modo === 'renta'; return S.catalog.map(e => { const v = rn ? e.r1 : e.precio; return [e.id, eqName(e) + (v > 0 ? ' — ' + (rn ? mx(v) + '/mes' : usd(v)) : '')]; }); }
+function eqOptions() { const rn = P.modo === 'renta'; return S.catalog.map(e => { const v = rn ? e.r1 : e.precio, nm = eqName(e); return [e.id, (nm.length > 52 ? nm.slice(0, 50).trim() + '…' : nm) + (v > 0 ? ' — ' + (rn ? mx(v) + '/mes' : usd(v)) : '')]; }); }
 function discPanel() {
   const rn = P.modo === 'renta';
   return `<div class="panel"><h2>Descuentos e instalación</h2>
@@ -1320,6 +1321,12 @@ function tabIns() {
     <div class="bar" style="margin-top:12px"><button class="btn primary" data-act="addInsumo">Guardar insumo</button></div>` : '<p class="muted" style="margin:8px 0 0">Los costos vienen del reporte de productos. Si cambia un costo, edítalo aquí y se actualizan todas las proyecciones.</p>'}</div>`;
 }
 
+function showIns(id, val) {
+  const w = String(val || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const all = S.insCat.filter(x => { const h = (x.p + ' ' + x.t + ' ' + x.d).toLowerCase(); return w.every(k => h.includes(k)); });
+  const res = all.slice(0, 40);
+  setO('ir-' + id, res.length ? res.map(x => `<button type="button" class="pick" data-act="pickIns" data-id="${id}" data-p="${esc(x.p)}"><b class="mono">${esc(x.p)}</b><span>${esc(x.d)}</span><i>${esc(x.t)} · US$ ${nf2.format(x.c)}</i></button>`).join('') + (all.length > res.length ? `<p class="muted" style="margin:6px 0">Mostrando ${res.length} de ${all.length}. Escribe más para acotar.</p>` : '') : '<p class="muted" style="margin:6px 0">Sin resultados. Prueba con otra palabra o agrégalo al catálogo de insumos.</p>');
+}
 function paintIns() {
   const imap = insIdx();
   Object.keys(S.kits).forEach(id => {
@@ -2142,11 +2149,13 @@ function quoteHTML() {
     b.rows.map(r => `<tr><td>${esc(eqName(r.e))}</td><td class="n">${r.qty}</td><td class="n">${money(r.unit)}</td><td class="n">${r.d ? nf1.format(r.d) + ' %' : '—'}</td><td class="n">${money(r.final)}</td></tr>`).join('') +
     `<tr class="subt"><td colspan="4">Subtotal ${esc(b.a.nombre || 'Sin nombre')}</td><td class="n">${money(b.rows.reduce((s, r) => s + r.final, 0))}</td></tr>`).join('');
   let ahorro = '';
+  const gastoMes = o.t.gastoMXN / 12, costoMes = rn ? (P.ivaOn ? o.totalM : o.rentaMes) + o.flows[0].elec * tc / 12 : 0, ahorroMes = gastoMes - costoMes, ahorroMesPct = gastoMes > 0 ? ahorroMes / gastoMes * 100 : null;
   if (P.qAhorro && o.hasEq) {
     ahorro = rn ? `<h2>Ahorro estimado</h2><table><tbody>
       <tr><td>Gasto actual en agua embotellada (por mes)</td><td class="n">${mx(o.t.gastoMXN / 12)}</td></tr>
-      <tr><td>Renta, electricidad y agua de los equipos (por mes)</td><td class="n">${mx((o.flows[0].pago + o.flows[0].elec) * tc / 12)}</td></tr>
-      <tr><td>Ahorro estimado el primer año</td><td class="n">${mx(o.ahorro1 * tc)}</td></tr></tbody></table>
+      <tr><td>Renta${P.ivaOn ? ' (con IVA)' : ''}, electricidad y agua de los equipos (por mes)</td><td class="n">${mx(costoMes)}</td></tr>
+      <tr><td>Ahorro mensual</td><td class="n">${mx(ahorroMes)}${ahorroMesPct != null ? ' · ' + pct(ahorroMesPct, 1) : ''}</td></tr>
+      <tr><td>Ahorro estimado el primer año</td><td class="n">${mx(ahorroMes * 12)}</td></tr></tbody></table>
       <p class="s">Estimación basada en los consumos y precios capturados con el cliente. Los resultados reales pueden variar.</p>`
       : `<h2>Ahorro estimado</h2><table><tbody>
       <tr><td>Gasto actual en agua embotellada (año 1)</td><td class="n">${mx(o.t.gastoMXN)}</td></tr>
@@ -2529,6 +2538,7 @@ const tabsOf = p => isBase(p) ? BASE_TABS : TABS;
 function ensurePres(p) {
   if (!Array.isArray(p.presTipos) || !p.presTipos.length) p.presTipos = [{ id: uid(), tipo: 'garrafon', nombre: 'Garrafón', l: p.lGar || 20, costo: p.pGar || 35 }];
   if (!Array.isArray(p.gcons)) p.gcons = [];
+  if (p.gcons.length) { p.gcons.forEach(c => { const t = (p.presTipos || []).find(q => q.id === c.pres); if (t) t.gq = (num(t.gq) || 0) + (num(c.qty) || 0); }); p.gcons = []; }
   p.areas.forEach(a => { if (!Array.isArray(a.cons)) a.cons = []; });
 }
 function baseCalc(p) {
@@ -2545,7 +2555,7 @@ function baseCalc(p) {
     return { a, cons, Ld, gastoMes, lines, renta, rentaNeta, cap, nEq, conEq, uso: cap > 0 ? Ld / cap : null, ahorro: gastoMes - rentaNeta, ahorroPct: gastoMes > 0 ? (gastoMes - rentaNeta) / gastoMes * 100 : null };
   });
   const sub = sum(areas, x => x.renta), descMonto = sub * descPct / 100, rentaMes = sub - descMonto, iva = p.ivaOn ? rentaMes * (p.iva || 0) / 100 : 0;
-  const gl = p.gcons.map(c => { const t = tip[c.pres], q = num(c.qty) || 0; return { c, t, qty: q, L: t ? q * (num(t.l) || 0) : 0, costo: t ? q * (num(t.costo) || 0) : 0 }; });
+  const gl = p.presTipos.map(t => { const q = num(t.gq) || 0; return { c: { pres: t.id }, t, qty: q, L: q * (num(t.l) || 0), costo: q * (num(t.costo) || 0) }; });
   const gGasto = sum(gl, x => x.costo), gL = sum(gl, x => x.L), glob = gGasto > 0;
   const cmp = areas.filter(x => x.conEq), gastoMes = glob ? gGasto : sum(cmp, x => x.gastoMes), rentaCmp = glob ? rentaMes : sum(cmp, x => x.rentaNeta);
   const inst = p.instCobro || 0, meses = p.instMeses > 1 ? Math.round(p.instMeses) : 0;
@@ -2570,7 +2580,8 @@ function tabBase() {
   const cat = Object.fromEntries(S.catalog.map(e => [e.id, e]));
   const tipoLab = { garrafon: 'Garrafón', botella: 'Botella', litros: 'Litros' };
   const tipos = P.presTipos.map((t, ti) => `<div class="btipo ${ti % 2 ? 'g2' : 'g1'}"><div class="bar" style="margin:0 0 8px;justify-content:space-between"><span class="chip">${esc(tipoLab[t.tipo] || 'Presentación')}</span><button class="btn danger sm" data-act="delTipo" data-id="${t.id}" aria-label="Quitar presentación">✕</button></div>
-    ${fld('Nombre', `t:${t.id}:nombre`, { type: 'text' })}<div class="grid" style="margin-top:8px">${fld(t.tipo === 'litros' ? 'Volumen por unidad' : 'Volumen por pieza', `t:${t.id}:l`, { suf: 'litros' })}${fld(t.tipo === 'litros' ? 'Costo por litro' : 'Costo por pieza', `t:${t.id}:costo`, { suf: 'MXN' })}</div></div>`).join('');
+    ${fld('Nombre', `t:${t.id}:nombre`, { type: 'text' })}<div class="grid" style="margin-top:8px">${fld(t.tipo === 'litros' ? 'Volumen por unidad' : 'Volumen por pieza', `t:${t.id}:l`, { suf: 'litros' })}${fld(t.tipo === 'litros' ? 'Costo por litro' : 'Costo por pieza', `t:${t.id}:costo`, { suf: 'MXN' })}</div>
+    <div style="margin-top:8px">${fld(t.tipo === 'litros' ? 'Consumo global al mes' : 'Consumo global al mes (piezas)', `t:${t.id}:gq`, { suf: t.tipo === 'litros' ? 'litros' : 'pzas', hint: 'Total que consume el cliente en un mes. El ahorro se calcula con este valor.' })}</div></div>`).join('');
   const areaCardB = (a, mode) => {
     const dr = draftOf(a.id), isEq = mode === 'eq';
     const cons = a.cons.map(c => `<div class="line eql ${a.cons.indexOf(c) % 2 ? 'e2' : 'e1'}" style="grid-template-columns:minmax(0,1fr) 120px 44px"><select data-b="w:${a.id}:${c.id}:pres" aria-label="Presentación"><option value="">Elige presentación…</option>${P.presTipos.map(t => `<option value="${t.id}"${t.id === c.pres ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
@@ -2595,10 +2606,6 @@ function tabBase() {
   return `<div>
   <aside class="bside" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start;position:static;max-height:none;overflow:visible;width:auto">
     <div class="bcol"><details class="bsec" open><summary>Datos generales</summary><div class="grid1">${fld('Cliente', 'p:cliente', { type: 'text' })}${fld('Ubicación', 'p:ubicacion', { type: 'text' })}${industriaFld()}${fld('Fecha', 'p:fecha', { type: 'date' })}</div></details>
-    <details class="bsec" open><summary>Consumo global del cliente</summary>
-      <p class="muted s" style="margin:0 0 8px">Cantidades totales que el cliente consume al mes, por presentación. El análisis de ahorro se calcula con este valor.</p>
-      ${(P.gcons || []).map((c, i) => `<div class="line eql ${i % 2 ? 'e2' : 'e1'}" style="grid-template-columns:minmax(0,1fr) 120px 44px"><select data-b="g:${c.id}:pres" aria-label="Presentación"><option value="">Elige presentación…</option>${P.presTipos.map(t => `<option value="${t.id}"${t.id === c.pres ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select><span class="inp"><input data-b="g:${c.id}:qty" data-num="1" type="text" inputmode="decimal" autocomplete="off" value="${esc(c.qty || '')}" placeholder="0" aria-label="Cantidad al mes"><i>al mes</i></span><button class="btn danger sm" data-act="delGcons" data-r="${c.id}" aria-label="Quitar consumo">✕</button></div>`).join('') || '<p class="muted" style="margin:0 0 8px">Aún no hay consumo global capturado.</p>'}
-      <button class="btn sm" data-act="addGcons">+ agregar consumo global</button><div id="bGl" style="margin-top:8px"></div></details>
     <details class="bsec" open><summary>Instalación</summary><div class="grid1">${fld('Cobro de instalación (sin IVA)', 'p:instCobro', { suf: 'MXN' })}${fld('Diferir en', 'p:instMeses', { suf: 'meses', hint: '0 o 1 = pago único' })}</div></details></div>
     <div class="bcol"><details class="bsec" open><summary>Datos de cotización</summary><div class="grid1">${folioFld()}${logoFld()}${fld('Nombre de la empresa (título de la cotización)', 'p:empresa', { type: 'text' })}${fld('Emisor de la cotización', 'p:emisor', { type: 'text' })}
       ${fld('Dirigida a (nombre)', 'p:dirNombre', { type: 'text' })}${fld('Puesto', 'p:dirPuesto', { type: 'text' })}${fld('Correo o teléfono', 'p:dirContacto', { type: 'text' })}
@@ -2606,8 +2613,8 @@ function tabBase() {
       <div class="bar" style="margin-top:8px">${chk('Mostrar IVA en la cotización', 'p:ivaOn')}</div>
       <label class="fld" style="margin-top:8px"><span>Notas y condiciones</span><textarea data-b="p:notas" rows="14">${esc(P.notas)}</textarea><small class="muted">Texto editable. Usa "- " al inicio para viñetas (con espacios al inicio, subviñeta) y termina una línea con ":" para que sea un título resaltado. En la cotización se muestra justificado.</small></label></details></div>
     <div class="bcol"><details class="bsec" open><summary>Datos de consumo y costos de insumos</summary>
-      <p class="muted s" style="margin:0 0 8px">Presentaciones de agua que el cliente compra hoy y lo que le cuesta cada una. Luego las usas en cada área.</p>
-      ${tipos}<div class="bar" style="margin-top:6px"><select data-b="u:tipoNew" aria-label="Tipo de presentación" style="flex:1 1 120px"><option value="garrafon"${(UI.u.tipoNew || 'garrafon') === 'garrafon' ? ' selected' : ''}>Garrafón</option><option value="botella"${UI.u.tipoNew === 'botella' ? ' selected' : ''}>Botella</option><option value="litros"${UI.u.tipoNew === 'litros' ? ' selected' : ''}>Litros</option></select><button class="btn primary" data-act="addTipo">Agregar presentación</button></div></details></div>
+      <p class="muted s" style="margin:0 0 8px">Registra cada presentación de agua que el cliente compra hoy: volumen, costo y cuánto consume en total al mes. El consumo por área se captura en la pestaña Equipos.</p>
+      ${tipos}<div class="bar" style="margin-top:6px"><select data-b="u:tipoNew" aria-label="Tipo de presentación" style="flex:1 1 120px"><option value="garrafon"${(UI.u.tipoNew || 'garrafon') === 'garrafon' ? ' selected' : ''}>Garrafón</option><option value="botella"${UI.u.tipoNew === 'botella' ? ' selected' : ''}>Botella</option><option value="litros"${UI.u.tipoNew === 'litros' ? ' selected' : ''}>Litros</option></select><button class="btn primary" data-act="addTipo">Agregar presentación</button></div><div id="bGl" style="margin-top:10px"></div></details></div>
       </aside>
   <section class="bmain" style="margin-top:14px"><h2 class="btitle">ÁREAS</h2>
     <div id="areasWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px">${P.areas.map((a, i) => `<div class="btipo ${i % 2 ? 'g2' : 'g1'}" id="ba-${a.id}" style="display:flex;gap:8px;align-items:flex-end"><div style="flex:1">${fld('Área', `a:${a.id}:nombre`, { type: 'text' })}</div><button class="btn danger sm" data-act="delArea" data-id="${a.id}" aria-label="Eliminar área">✕</button></div>`).join('') || '<p class="muted">Empieza agregando las áreas del cliente (cocina, bar, habitaciones…).</p>'}</div>
@@ -2630,7 +2637,7 @@ function paintBase() {
     setT('bs-' + x.a.id, mx(x.renta));
     setO('bc-' + x.a.id, baseCmpHTML(x)); setO('bv-' + x.a.id, baseCapHTML(x));
   });
-  setO('bGl', B.gl.length ? `<table class="t"><tbody><tr><td>Litros al mes</td><td class="n">${nf0.format(B.gL)} L</td></tr><tr class="tot"><td>Gasto actual al mes</td><td class="n">${mx(B.gGasto)}</td></tr></tbody></table>` : '');
+  setO('bGl', B.gl.some(x => x.qty > 0) ? `<table class="t"><tbody><tr><td>Litros al mes</td><td class="n">${nf0.format(B.gL)} L</td></tr><tr class="tot"><td>Gasto actual al mes</td><td class="n">${mx(B.gGasto)}</td></tr></tbody></table>` : '');
   const row = (a, b, c) => `<tr class="${c || ''}"><td>${a}</td><td class="n">${b}</td></tr>`;
   setO('bTot', `<div class="tw"><table class="t"><tbody>
     ${row('Renta mensual de los equipos', mx(B.sub))}${B.descMonto ? row('Descuento general (' + pct(B.descPct, 1) + ')', '-' + mx(B.descMonto)) : ''}
@@ -2658,10 +2665,12 @@ function quoteBaseHTML() {
     `<tr class="tot"><td>Total</td><td class="n"></td><td class="n">${nf0.format(B.gL)}</td><td class="n"></td><td class="n">${mx(B.gGasto)}</td></tr></tbody></table>` : '';
   const arT = B.areas.filter(x => x.cons.some(c => c.qty > 0)).length ? `<h2>Consumo reportado por área</h2><table><thead><tr><th>Área</th><th>Presentación</th><th class="n">Cantidad por día</th><th class="n">Litros por día</th><th class="n">Gasto al mes</th></tr></thead><tbody>` +
     B.areas.filter(x => x.cons.some(c => c.qty > 0)).map(x => x.cons.filter(c => c.qty > 0).map((c, i) => `<tr><td>${i ? '' : esc(x.a.nombre || 'Sin nombre')}</td><td>${pn(c)}</td><td class="n">${nf1.format(c.qty)}</td><td class="n">${nf0.format(c.L)}</td><td class="n">${mx(c.costo * B.dias / 12)}</td></tr>`).join('')).join('') + `</tbody></table>` : '';
-  const cmp = B.glob ? `<h2>Comparativo de ahorro</h2><table><thead><tr><th>Concepto</th><th class="n">Monto /mes</th></tr></thead><tbody><tr><td>Gasto actual en agua embotellada (consumo global)</td><td class="n">${mx(B.gastoMes)}</td></tr><tr><td>Renta mensual de los equipos</td><td class="n">${mx(B.rentaCmp)}</td></tr><tr class="tot"><td>Ahorro mensual · ${pct(B.ahorroPct)}</td><td class="n">${mx(B.ahorro)}</td></tr></tbody></table>
-    <p class="s">Estimación basada en el consumo global mensual capturado con el cliente, sin instalación ni IVA. Los resultados reales pueden variar.</p>` : B.gastoMes > 0 ? `<h2>Comparativo de consumo</h2><table><thead><tr><th>Área</th><th class="n">Gasto actual /mes</th><th class="n">Renta /mes</th><th class="n">Ahorro /mes</th><th class="n">Ahorro %</th></tr></thead><tbody>` +
-    B.areas.filter(x => x.conEq && x.gastoMes > 0).map(x => `<tr><td>${esc(x.a.nombre || 'Sin nombre')}</td><td class="n">${mx(x.gastoMes)}</td><td class="n">${mx(x.rentaNeta)}</td><td class="n">${mx(x.ahorro)}</td><td class="n">${pct(x.ahorroPct)}</td></tr>`).join('') +
-    `<tr class="tot"><td>Total</td><td class="n">${mx(B.gastoMes)}</td><td class="n">${mx(B.rentaCmp)}</td><td class="n">${mx(B.ahorro)}</td><td class="n">${pct(B.ahorroPct)}</td></tr></tbody></table>
+  const fIva = P.ivaOn ? 1 + (P.iva || 0) / 100 : 1, qRenta = B.rentaCmp * fIva, qAhorro = B.gastoMes - qRenta, qAhPct = B.gastoMes > 0 ? qAhorro / B.gastoMes * 100 : null;
+  const cmp = B.glob ? `<h2>Comparativo de ahorro</h2><table><thead><tr><th>Concepto</th><th class="n">Monto /mes</th></tr></thead><tbody><tr><td>Gasto actual en agua embotellada (consumo global)</td><td class="n">${mx(B.gastoMes)}</td></tr><tr><td>Renta mensual de los equipos${P.ivaOn ? ' (con IVA)' : ''}</td><td class="n">${mx(qRenta)}</td></tr><tr><td>Ahorro mensual · ${pct(qAhPct, 1)}</td><td class="n">${mx(qAhorro)}</td></tr><tr class="tot"><td>Ahorro estimado el primer año</td><td class="n">${mx(qAhorro * 12)}</td></tr></tbody></table>
+    <p class="s">Estimación basada en el consumo global mensual capturado con el cliente, sin costo de instalación${P.ivaOn ? '; la renta incluye IVA' : ''}. Los resultados reales pueden variar.</p>` : B.gastoMes > 0 ? `<h2>Comparativo de consumo</h2><table><thead><tr><th>Área</th><th class="n">Gasto actual /mes</th><th class="n">Renta /mes</th><th class="n">Ahorro /mes</th><th class="n">Ahorro %</th></tr></thead><tbody>` +
+    B.areas.filter(x => x.conEq && x.gastoMes > 0).map(x => { const rq = x.rentaNeta * fIva, ah = x.gastoMes - rq; return `<tr><td>${esc(x.a.nombre || 'Sin nombre')}</td><td class="n">${mx(x.gastoMes)}</td><td class="n">${mx(rq)}</td><td class="n">${mx(ah)}</td><td class="n">${pct(x.gastoMes > 0 ? ah / x.gastoMes * 100 : null, 1)}</td></tr>`; }).join('') +
+    `<tr class="tot"><td>Total</td><td class="n">${mx(B.gastoMes)}</td><td class="n">${mx(qRenta)}</td><td class="n">${mx(qAhorro)}</td><td class="n">${pct(qAhPct, 1)}</td></tr></tbody></table>
+    <p class="s"><b>Ahorro estimado el primer año: ${mx(qAhorro * 12)}.</b>${P.ivaOn ? ' La renta incluye IVA.' : ''}</p>
     <p class="s">Estimación basada en el consumo de garrafones y botellas capturado con el cliente, sin instalación ni IVA. Los resultados reales pueden variar.</p>` : '';
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cotización ${esc(P.cliente)}</title><style>${FONT_CSS}
   body{font:14px/1.5 'ITC Avant Garde Gothic Std',system-ui,-apple-system,'Segoe UI',sans-serif;color:#53555A;max-width:820px;margin:0 auto;padding:32px 20px}
@@ -2704,6 +2713,7 @@ function init() {
   </div></div>
   <div class="in"><main><div class="strip" id="strip"></div><div id="main"></div></main></div>
   <div id="toast" role="status" hidden></div>`;
+  document.addEventListener('focusin', e => { const bk = e.target && e.target.dataset && e.target.dataset.b; if (bk && /^q:.*:parte$/.test(bk)) showIns(bk.split(':')[1], e.target.value); });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); UI.inst = e; const b = document.getElementById('instBtn'); if (b) b.hidden = false; });
   window.addEventListener('appinstalled', () => { UI.inst = null; const b = document.getElementById('instBtn'); if (b) b.hidden = true; toast('App instalada. Búscala en el menú de inicio.'); });
   UI.sync = STANDALONE ? 'local' : (navigator.onLine ? 'pend' : 'off');
